@@ -62,6 +62,7 @@
 #include "recording/recording_controller.h"
 #include "Media management/recording/disk_writer_service_impl.h"
 #include "Media management/intake/imedia_intake_pipeline.h"
+#include <algorithm>
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
@@ -632,11 +633,58 @@ bool CompositionRoot::connectAudioToBridges() {
     // 1. Prepare Audio Engine for hardware callbacks
     audioEngine_->prepare(44100.0, 512);
 
-    // 2. Open Stream and connect it to the AudioEngine client callback
+    // 2. Pick the devices instead of blindly opening index 0 (on a MacBook that is the
+    //    1-channel built-in mic, so a 2-channel open fails and the DAW runs with no stream).
+    //    Output follows the system default output. If that device can also record (an audio
+    //    interface or an aggregate device), it is used for input too: one device means one clock,
+    //    whereas two devices drift apart and RtAudio drops or repeats buffers (clicks in takes).
+    //    Otherwise input is the device with the most input channels (a USB audio interface beats
+    //    the built-in mic), ties going to the default input.
+    uint32_t inputIndex = Layer1::UNUSED_DEVICE_INDEX;
+    uint32_t outputIndex = Layer1::UNUSED_DEVICE_INDEX;
+    uint32_t inputChannels = 0;
+    uint32_t bestInputChannels = 0;
+    bool bestInputIsDefault = false;
+    const uint32_t deviceCount = audioDriver_->getDeviceCount();
+    for (uint32_t i = 0; i < deviceCount; ++i) {
+        const Layer1::DeviceInfo info = audioDriver_->getDeviceInfo(i);
+        if (info.isDefaultOutput && info.maxOutputChannels >= 2 && info.maxInputChannels > 0) {
+            inputIndex = i;
+            outputIndex = i;
+            inputChannels = std::min(2U, info.maxInputChannels);
+            break;
+        }
+    }
+    const bool singleDevice = outputIndex != Layer1::UNUSED_DEVICE_INDEX;
+    for (uint32_t i = 0; i < deviceCount && !singleDevice; ++i) {
+        const Layer1::DeviceInfo info = audioDriver_->getDeviceInfo(i);
+        if (info.maxOutputChannels >= 2
+            && (outputIndex == Layer1::UNUSED_DEVICE_INDEX || info.isDefaultOutput)) {
+            outputIndex = i;
+        }
+        const bool moreInputs = info.maxInputChannels > bestInputChannels;
+        const bool tieWithDefault = info.maxInputChannels > 0
+            && info.maxInputChannels == bestInputChannels && info.isDefaultInput && !bestInputIsDefault;
+        if (moreInputs || tieWithDefault) {
+            inputIndex = i;
+            bestInputChannels = info.maxInputChannels;
+            bestInputIsDefault = info.isDefaultInput;
+            inputChannels = std::min(2U, info.maxInputChannels);
+        }
+    }
+    if (outputIndex != Layer1::UNUSED_DEVICE_INDEX) {
+        std::cout << "CompositionRoot: Audio output device: " << audioDriver_->getDeviceInfo(outputIndex).name << std::endl;
+    }
+    if (inputIndex != Layer1::UNUSED_DEVICE_INDEX) {
+        std::cout << "CompositionRoot: Audio input device: " << audioDriver_->getDeviceInfo(inputIndex).name
+                  << " (" << inputChannels << " ch)" << std::endl;
+    }
+
+    // 3. Open Stream and connect it to the AudioEngine client callback
     Layer1::IAudioDriver::StreamConfig config{};
-    config.inputDeviceIndex = 0;
-    config.outputDeviceIndex = 0;
-    config.numInputChannels = 2;
+    config.inputDeviceIndex = inputIndex;
+    config.outputDeviceIndex = outputIndex;
+    config.numInputChannels = inputChannels;
     config.numOutputChannels = 2;
     config.sampleRate = 44100;
     config.bufferSize = 512;

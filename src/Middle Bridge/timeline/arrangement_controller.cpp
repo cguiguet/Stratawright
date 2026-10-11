@@ -1026,6 +1026,38 @@ void ArrangementController::onSessionChanged(composition::IProjectSession* sessi
     }
 }
 
+RegionID ArrangementController::duplicateAudioRegion(RegionID regionId, uint64_t targetStartFrame) {
+    composition::IPlaylist::RegionInfo info{};
+    TrackID trackId = TrackID::invalid();
+    if (!findPlaylistForRegion(regionId, info, trackId) || info.region.type != composition::RegionType::AUDIO) {
+        return RegionID::invalid();
+    }
+
+    // The region only knows its source id; the file path lives in the source descriptor.
+    auto* sourceManager = getSourceManager();
+    composition::AudioSourceDescriptor desc;
+    std::string filePath;
+    if (!sourceManager || !stringRegistry_ || !sourceManager->getSource(info.region.sourceId, desc)
+        || !stringRegistry_->getString(desc.nameId, filePath) || filePath.empty()) {
+        return RegionID::invalid();
+    }
+
+    VisualRegion original{};
+    if (!getVisualRegion(regionId, original)) {
+        return RegionID::invalid();
+    }
+
+    RegionID copy = importAudioClip(trackId, filePath.c_str(), targetStartFrame);
+    if (!copy.isValid()) {
+        return copy;
+    }
+    trimRegion(copy, targetStartFrame, original.fileOffsetFrames, original.durationFrames);
+    setRegionGain(copy, original.gainLinear);
+    setRegionFades(copy, original.fadeInFrames, original.fadeOutFrames);
+    setRegionMuted(copy, original.isMuted);
+    return copy;
+}
+
 void ArrangementController::updateRegionMetadata(RegionID regionId, const char* name, const char* comment, uint32_t colorARGB) {
     auto* session = sessionManager_->getActiveSession();
     if (!session || !session->getRegionMetadataManager()) return;

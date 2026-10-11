@@ -6,6 +6,7 @@ add_library(layer7_views STATIC
     ../shortcuts/ShortcutManager.cpp
     theme.cpp
     boot/splash_screen.cpp
+    updates/upstream_pull_requests.cpp
     mixer/base_tactile_control.cpp
     mixer/rotary_dial.cpp
     mixer/cyber_fader.cpp

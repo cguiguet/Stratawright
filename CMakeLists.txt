@@ -158,7 +158,7 @@ if(APPLE AND NOT TARGET WrapOpenGL::WrapOpenGL)
 endif()
 
 # Find Qt6 Components
-find_package(Qt6 COMPONENTS Widgets Core Gui Svg REQUIRED)
+find_package(Qt6 COMPONENTS Widgets Core Gui Svg Network REQUIRED)
 
 # Dependencies via vcpkg/system
 find_package(RtAudio CONFIG REQUIRED)

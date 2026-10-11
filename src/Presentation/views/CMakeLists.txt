@@ -7,6 +7,7 @@ add_library(layer7_views STATIC
     theme.cpp
     boot/splash_screen.cpp
     updates/upstream_pull_requests.cpp
+    updates/upstream_pull_request_notifier.cpp
     mixer/base_tactile_control.cpp
     mixer/rotary_dial.cpp
     mixer/cyber_fader.cpp
@@ -88,5 +89,5 @@ target_include_directories(layer7_views PUBLIC
 target_link_libraries(layer7_views PUBLIC
     common_utils
     middle_bridge          # exposes src/Middle Bridge/ include path via PUBLIC
-    Qt6::Widgets Qt6::Core Qt6::Gui Qt6::Svg
+    Qt6::Widgets Qt6::Core Qt6::Gui Qt6::Svg Qt6::Network
 )

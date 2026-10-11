@@ -6,6 +6,7 @@
 #include "Presentation/views/playlist/PlaylistWindow.h"
 #include "Presentation/views/boot/splash_screen.h"
 #include "Presentation/views/theme.h"
+#include "Presentation/views/updates/upstream_pull_request_notifier.h"
 #include "Middle Bridge/boot/boot_controller.h"
 #include "Agentic layer/server/ipc_server.h"
 #include "Agentic layer/server/command_dispatcher.h"
@@ -342,6 +343,10 @@ void Application::onBootCompleted() {
 
     // Process pending events to ensure MainWindow's show event is registered
     m_qapp->processEvents();
+
+    // Announce pull requests opened upstream since the last launch (async; owned by the window).
+    auto* upstreamNotifier = new presentation::updates::UpstreamPullRequestNotifier(m_mainWindow.get());
+    upstreamNotifier->checkNow();
 
     // The default session was bootstrapped in wireLayer6ToLayer7 before
     // PlaylistWindow existed, so it missed the initial onSessionChanged.

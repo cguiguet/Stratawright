@@ -299,7 +299,12 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Professional Agent-Based DAW")
 if(APPLE)
     set(CPACK_GENERATOR "productbuild")
     set(CPACK_PACKAGING_INSTALL_PREFIX "/Applications")
-    set(CPACK_PRODUCTBUILD_IDENTITY_NAME "" CACHE STRING "Code signing identity for productbuild")
+    set(CPACK_PRODUCTBUILD_IDENTITY_NAME "" CACHE STRING "Code signing identity for productbuild (empty = unsigned)")
+    # An empty-but-defined identity makes CPack run `productbuild --sign ""`, which fails.
+    if(NOT CPACK_PRODUCTBUILD_IDENTITY_NAME)
+        unset(CPACK_PRODUCTBUILD_IDENTITY_NAME)
+        unset(CPACK_PRODUCTBUILD_IDENTITY_NAME CACHE)
+    endif()
     
     # Configure post-install script to automatically symlink daw-cli
     set(CPACK_POSTFLIGHT_APPLICATION_SCRIPT "${CMAKE_SOURCE_DIR}/scripts/packaging/postinstall.sh")

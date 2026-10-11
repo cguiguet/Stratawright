@@ -198,7 +198,22 @@ add_subdirectory("src/Core infrastructure")
 add_subdirectory("src/Core audio engine")
 
 # Third-party: SoundTouch (must be before Layer 4 and Layer 6 consumers)
+# Upstream SoundTouch only defines the `SoundTouch` target and must not inherit the project's
+# -Werror warning set (its sources and headers do not build under it). The soundstretch CLI is unused.
+set(SOUNDSTRETCH OFF CACHE BOOL "Build soundstretch command line utility." FORCE)
 add_subdirectory(src/third_party/soundtouch)
+if(NOT MSVC)
+    target_compile_options(SoundTouch PRIVATE -w)
+endif()
+get_target_property(SOUNDTOUCH_INCLUDE_DIRS SoundTouch INTERFACE_INCLUDE_DIRECTORIES)
+set_target_properties(SoundTouch PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${SOUNDTOUCH_INCLUDE_DIRS}")
+# Names the DSP and analysis layers link against.
+if(NOT TARGET soundtouch_lib)
+    add_library(soundtouch_lib ALIAS SoundTouch)
+endif()
+if(NOT TARGET soundtouch_analysis)
+    add_library(soundtouch_analysis ALIAS SoundTouch)
+endif()
 # RubberBand upstream is Meson-only; inject the committed CMake overlay.
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/src/third_party/rubberband-default/CMakeLists.txt" AND EXISTS "${CMAKE_SOURCE_DIR}/cmake/rubberband/CMakeLists.txt")
     file(COPY "${CMAKE_SOURCE_DIR}/cmake/rubberband/CMakeLists.txt" DESTINATION "${CMAKE_SOURCE_DIR}/src/third_party/rubberband-default")

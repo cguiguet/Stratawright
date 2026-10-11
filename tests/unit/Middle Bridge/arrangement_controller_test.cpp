@@ -491,6 +491,29 @@ TEST_CASE("ArrangementController: Basic Clip Import and Mutations", "[bridge][Ar
         CHECK(rightPart.region.sourceLength == 441000 - 5000);
         CHECK(rightPart.region.sourceStartSample == 5000);
     }
+
+    SECTION("Duplicate Audio Region keeps the source file and the trim") {
+        RegionID rId = controller.importAudioClip(track1, "/path/to/loop.wav", 0);
+        controller.trimRegion(rId, 0, 12000, 100000);
+
+        RegionID copyId = controller.duplicateAudioRegion(rId, 100000);
+        REQUIRE(copyId.id != 0);
+
+        auto* playlist = trackManager.playlists[track1.id].get();
+        REQUIRE(playlist->regions.size() == 2);
+        auto copy = std::find_if(playlist->regions.begin(), playlist->regions.end(),
+            [&](const composition::IPlaylist::RegionInfo& r) { return r.id == copyId; });
+        REQUIRE(copy != playlist->regions.end());
+        CHECK(copy->region.positionSample == 100000);
+        CHECK(copy->region.sourceStartSample == 12000);
+        CHECK(copy->region.sourceLength == 100000);
+
+        AudioSourceDescriptor desc;
+        REQUIRE(sourceManager.getSource(copy->region.sourceId, desc));
+        std::string resolvedPath;
+        REQUIRE(stringRegistry.getString(desc.nameId, resolvedPath));
+        CHECK(resolvedPath == "/path/to/loop.wav");
+    }
 }
 
 TEST_CASE("ArrangementController: Same-Track and Cross-Track Moving", "[bridge][ArrangementController]") {

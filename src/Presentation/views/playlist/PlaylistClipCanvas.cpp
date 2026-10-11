@@ -3366,7 +3366,8 @@ void PlaylistClipCanvas::duplicateSelectedClips()
             uint64_t targetStart = r.startFrame + r.durationFrames;
             bridge::RegionID newId = bridge::RegionID::invalid();
             if (r.clipType == composition::RegionType::AUDIO) {
-                newId = m_arrangement->importAudioClip(r.trackId, r.comment, targetStart);
+                // Copy the region itself (source file + trim); r.comment is a user note, not a path.
+                newId = m_arrangement->duplicateAudioRegion(id, targetStart);
             } else if (r.clipType == composition::RegionType::MIDI) {
                 newId = m_arrangement->insertMidiClip(r.trackId, targetStart, r.durationFrames);
             } else if (r.clipType == composition::RegionType::AUTOMATION) {

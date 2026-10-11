@@ -53,6 +53,7 @@ public:
     RegionID moveRegion(RegionID regionId, TrackID destTrack, int64_t newStartFrame, uint32_t destLayer = 0xFFFFFFFF) override;
     void trimRegion(RegionID regionId, uint64_t newPosition, uint64_t newSourceStart, uint64_t newDuration) override;
     bool getVisualRegion(RegionID regionId, VisualRegion& outRegion) const override;
+    RegionID duplicateAudioRegion(RegionID regionId, uint64_t targetStartFrame) override;
 
     // --- Per-Clip Properties ---
     void setRegionGain(RegionID id, float gainLinear) override;

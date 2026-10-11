@@ -28,7 +28,7 @@ void processSampler(
 
     // Update isPlaying based on ProcessContext transport state if available
     if (context) {
-        s->isPlaying = (context->transportState == TransportState::PLAYING);
+        s->isPlaying = (context->transportState != TransportState::STOPPED);  // PLAYING or RECORDING
     }
 
     EventScanner scanner(events, numEvents);

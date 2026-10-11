@@ -38,7 +38,7 @@ void processMidiSequencer(
 
     EventScanner scanner(events, numEvents);
     const TimelineSnapshot* snapshot = context->timelineSnapshot;
-    bool isPlaying = (context->transportState == TransportState::PLAYING);
+    bool isPlaying = (context->transportState != TransportState::STOPPED);  // PLAYING or RECORDING
     uint64_t startSample = context->transport.positionSample;
 
     // 1. Process sample-accurate events at this specific offset (e.g. automation)

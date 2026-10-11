@@ -48,7 +48,8 @@ void processAudioSequencer(
     }
 
     // 2. Event-Driven Transport Check (Rule 13)
-    bool isPlaying = (context->transportState == TransportState::PLAYING);
+    // Clips keep playing while recording, so takes can be overdubbed on the existing tracks.
+    bool isPlaying = (context->transportState != TransportState::STOPPED);
     if (!isPlaying) {
         // Still process automation events to keep s->targetGain updated
         for (uint32_t i = 0; i < numEvents; ++i) {

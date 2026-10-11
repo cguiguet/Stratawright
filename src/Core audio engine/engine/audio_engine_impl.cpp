@@ -170,7 +170,7 @@ void AudioEngineImpl::processAudio(float* const* inputChannels,
         uint64_t startSample = transport_ ? transport_->getPosition() : 0;
         LoopState loop = transport_ ? transport_->getLoopState() : LoopState{};
         bool loopEnabled = (loop.mode == LoopState::LoopMode::ENABLED);
-        bool isPlaying = currentContext_.transportState == TransportState::PLAYING;
+        bool isPlaying = currentContext_.transportState != TransportState::STOPPED;  // PLAYING or RECORDING
         midiPlayheadRenderer_->renderMIDIPlayback(startSample, numFrames, loopEnabled, loop.startSample, loop.endSample, eventQueue_, isPlaying);
     }
 
@@ -178,7 +178,7 @@ void AudioEngineImpl::processAudio(float* const* inputChannels,
         constexpr uint32_t MAX_AUTOMATION_EVENTS = 512;
         EventData automationEvents[MAX_AUTOMATION_EVENTS];
         uint64_t startSample = transport_ ? transport_->getPosition() : 0;
-        bool isPlaying = currentContext_.transportState == TransportState::PLAYING;
+        bool isPlaying = currentContext_.transportState != TransportState::STOPPED;  // PLAYING or RECORDING
         uint32_t generatedCount = automationProcessor_->generateAutomationEvents(
             startSample,
             numFrames,
@@ -296,7 +296,7 @@ void AudioEngineImpl::endCycle(uint32_t numFrames) {
     // woken here. dispatch_semaphore_signal is async-signal-safe and RT-safe.
     if (butlerThread_) {
         uint64_t pos = transport_ ? transport_->getPosition() : 0;
-        bool isPlaying = currentContext_.transportState == TransportState::PLAYING;
+        bool isPlaying = currentContext_.transportState != TransportState::STOPPED;  // PLAYING or RECORDING
         float sr = currentContext_.sampleRate;
         butlerThread_->updateTransportState(pos, sr, isPlaying);
         butlerThread_->updateTimelineSnapshot(currentContext_.timelineSnapshot);

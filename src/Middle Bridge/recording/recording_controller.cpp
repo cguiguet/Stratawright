@@ -178,10 +178,11 @@ void RecordingController::onRecordingPassComplete(const RecordingPassCompleteEve
 
     if (!result.success) return;
 
-    // Calculate Latency Compensation (PDC + RTL)
-    uint64_t totalDelay = 0;
+    // Calculate Latency Compensation (PDC + RTL). The engine only knows the DSP graph latency,
+    // so the hardware round trip is added on top, otherwise every take lands late.
+    uint64_t totalDelay = hardwareLatencySamples_;
     if (audioEngine_) {
-        totalDelay = audioEngine_->getTotalRTLSamples() + audioEngine_->getNodePDCDelaySamples(event.inputNodeId);
+        totalDelay += audioEngine_->getTotalRTLSamples() + audioEngine_->getNodePDCDelaySamples(event.inputNodeId);
     }
     
     if (intake_) {
@@ -205,7 +206,10 @@ void RecordingController::onRecordingPassComplete(const RecordingPassCompleteEve
         take.trackId = event.trackId;
         take.inputNodeId = event.inputNodeId;
         take.hardwareStartSample = actualStart;
-        take.hardwareEndSample = event.endSample;
+        // actualStart may come from the timeline while event.endSample is in the event's own
+        // sample domain; derive the end from the recorded length so end - start cannot underflow.
+        const uint64_t recordedLength = event.endSample > event.startSample ? event.endSample - event.startSample : 0;
+        take.hardwareEndSample = actualStart + recordedLength;
         take.mediaId = result.mediaId.toRaw();
         take.sampleRate = audioEngine_ ? static_cast<uint32_t>(audioEngine_->getSampleRate()) : 44100;
         take.channelCount = 2; // Can hardcode for now, or extract from somewhere

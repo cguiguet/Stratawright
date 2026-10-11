@@ -62,6 +62,9 @@
 #include "recording/recording_controller.h"
 #include "Media management/recording/disk_writer_service_impl.h"
 #include "Media management/intake/imedia_intake_pipeline.h"
+#ifdef __APPLE__
+#include "core_audio_latency.h"
+#endif
 #include <algorithm>
 #include <iostream>
 #include <cstring>
@@ -700,6 +703,20 @@ bool CompositionRoot::connectAudioToBridges() {
         if (!audioDriver_->startStream()) {
             std::cerr << "CompositionRoot: Failed to start audio hardware stream callback" << std::endl;
         }
+#ifdef __APPLE__
+        uint64_t roundTripFrames = 0;
+        if (inputIndex != Layer1::UNUSED_DEVICE_INDEX) {
+            roundTripFrames += coreAudioLatencyFrames(audioDriver_->getDeviceInfo(inputIndex).name, true);
+        }
+        if (outputIndex != Layer1::UNUSED_DEVICE_INDEX) {
+            roundTripFrames += coreAudioLatencyFrames(audioDriver_->getDeviceInfo(outputIndex).name, false);
+        }
+        if (recordingController_) {
+            recordingController_->setHardwareLatencySamples(roundTripFrames);
+        }
+        std::cout << "CompositionRoot: Recording latency compensation: " << roundTripFrames << " frames ("
+                  << (static_cast<double>(roundTripFrames) * 1000.0 / static_cast<double>(config.sampleRate)) << " ms)" << std::endl;
+#endif
     }
 
     return true;

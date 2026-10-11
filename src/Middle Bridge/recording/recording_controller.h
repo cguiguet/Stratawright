@@ -31,6 +31,8 @@ public:
     void setMutationBridge(Layer2::IMutationBridge* bridge) { mutationBridge_ = bridge; }
     void setTakeRecordingIntake(composition::ITakeRecordingIntake* intake) { intake_ = intake; }
     void setIntakePipeline(MediaManagement::IMediaIntakePipeline* pipeline) { intakePipeline_ = pipeline; }
+    // Hardware round trip (input + output device latency, safety offsets, buffers) in samples.
+    void setHardwareLatencySamples(uint64_t samples) { hardwareLatencySamples_ = samples; }
 
     void setDiskWriterService(std::shared_ptr<MediaManagement::IDiskWriterService> service) override;
     void setTempRecordingDirectory(const std::string& path) override;
@@ -49,6 +51,7 @@ private:
     Layer2::IMutationBridge* mutationBridge_ = nullptr;
     composition::ITakeRecordingIntake* intake_ = nullptr;
     MediaManagement::IMediaIntakePipeline* intakePipeline_ = nullptr;
+    uint64_t hardwareLatencySamples_ = 0;
 
     std::shared_ptr<MediaManagement::IDiskWriterService> diskWriterService_;
     std::string tempRecordingDirectory_;

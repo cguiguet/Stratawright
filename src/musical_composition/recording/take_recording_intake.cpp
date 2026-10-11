@@ -45,7 +45,9 @@ std::vector<RegionID> TakeRecordingIntake::ingestTake(const RawTake& take,
         region.sourceStartSample = totalLatencySamples - take.hardwareStartSample;
     }
     
-    region.sourceLength = take.hardwareEndSample - take.hardwareStartSample;
+    // Skipped latency samples at the head of the file are not part of the region.
+    const uint64_t takeLength = take.hardwareEndSample - take.hardwareStartSample;
+    region.sourceLength = takeLength > region.sourceStartSample ? takeLength - region.sourceStartSample : 0;
     region.gain = 1.0f;
     region.isMuted = false;
     region.warpMode = WarpMode::BYPASS;

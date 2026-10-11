@@ -11,6 +11,11 @@ add_executable(${PROJECT_EXECUTABLE_NAME} MACOSX_BUNDLE WIN32
     ${CMAKE_SOURCE_DIR}/src/Presentation/resources.qrc
 )
 
+if(APPLE)
+    target_sources(${PROJECT_EXECUTABLE_NAME} PRIVATE core_audio_latency.cpp)
+    target_link_libraries(${PROJECT_EXECUTABLE_NAME} PRIVATE "-framework CoreAudio")
+endif()
+
 # Link all layers (dependency order matters)
 target_link_libraries(${PROJECT_EXECUTABLE_NAME} PRIVATE
     # Layer 7

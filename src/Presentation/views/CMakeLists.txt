@@ -8,6 +8,7 @@ add_library(layer7_views STATIC
     boot/splash_screen.cpp
     updates/upstream_pull_requests.cpp
     updates/upstream_pull_request_notifier.cpp
+    chat/claude_stream.cpp
     mixer/base_tactile_control.cpp
     mixer/rotary_dial.cpp
     mixer/cyber_fader.cpp

@@ -4,7 +4,9 @@ cmake_minimum_required(VERSION 3.20)
 
 add_executable(presentation_unit_tests
     upstream_pull_requests_test.cpp
+    claude_stream_test.cpp
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/updates/upstream_pull_requests.cpp"
+    "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_stream.cpp"
 )
 
 target_include_directories(presentation_unit_tests PRIVATE

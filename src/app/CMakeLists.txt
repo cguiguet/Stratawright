@@ -16,6 +16,14 @@ if(APPLE)
     target_link_libraries(${PROJECT_EXECUTABLE_NAME} PRIVATE "-framework CoreAudio")
 endif()
 
+# Ship the SoundFont of the built-in GM instruments inside the bundle (Contents/Resources/soundfonts),
+# where they look for it first; scripts/setup_third_party.sh downloads it.
+set(GM_SOUNDFONT "${CMAKE_SOURCE_DIR}/src/third_party/soundfonts/GeneralUser-GS.sf2")
+if(APPLE AND EXISTS "${GM_SOUNDFONT}")
+    target_sources(${PROJECT_EXECUTABLE_NAME} PRIVATE "${GM_SOUNDFONT}")
+    set_source_files_properties("${GM_SOUNDFONT}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources/soundfonts)
+endif()
+
 # Link all layers (dependency order matters)
 target_link_libraries(${PROJECT_EXECUTABLE_NAME} PRIVATE
     # Layer 7

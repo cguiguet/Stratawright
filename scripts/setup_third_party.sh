@@ -52,5 +52,26 @@ clone_repo "soundtouch" "https://codeberg.org/soundtouch/soundtouch.git"
 # 8. ASIO SDK (Windows Low-Latency Audio Driver)
 clone_repo "ASIOSDK" "https://github.com/audiosdk/asio.git"
 
+# 9. GeneralUser GS (General MIDI SoundFont for the built-in GM Synth instrument)
+# Pinned to a commit and verified, so every checkout plays the same sounds.
+SOUNDFONT_DIR="$THIRD_PARTY_DIR/soundfonts"
+SOUNDFONT="$SOUNDFONT_DIR/GeneralUser-GS.sf2"
+SOUNDFONT_URL="https://github.com/mrbumpy409/GeneralUser-GS/raw/684543d5e5efaef08d02be50dcda8d552478fa60/GeneralUser-GS.sf2"
+SOUNDFONT_SHA256="9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe"
+if [ -f "$SOUNDFONT" ] && [ "$(shasum -a 256 "$SOUNDFONT" | cut -d' ' -f1)" = "$SOUNDFONT_SHA256" ]; then
+    echo "✓ GeneralUser GS SoundFont already exists, skipping."
+else
+    echo "--> Downloading GeneralUser GS SoundFont (32 MB)..."
+    mkdir -p "$SOUNDFONT_DIR"
+    curl -fL --retry 3 -o "$SOUNDFONT.download" "$SOUNDFONT_URL"
+    if [ "$(shasum -a 256 "$SOUNDFONT.download" | cut -d' ' -f1)" != "$SOUNDFONT_SHA256" ]; then
+        rm -f "$SOUNDFONT.download"
+        echo "✗ GeneralUser GS checksum mismatch, aborting." >&2
+        exit 1
+    fi
+    mv "$SOUNDFONT.download" "$SOUNDFONT"
+    echo "✓ GeneralUser GS SoundFont setup complete."
+fi
+
 echo ""
 echo "✓ All third-party SDKs are successfully configured in $THIRD_PARTY_DIR!"

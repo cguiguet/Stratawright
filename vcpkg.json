@@ -10,6 +10,7 @@
     "catch2",
     "sqlite3",
     "libebur128",
-    "libsamplerate"
+    "libsamplerate",
+    "fluidsynth"
   ]
 }

@@ -2,6 +2,7 @@ set(VST3_SDK_DIR "${CMAKE_SOURCE_DIR}/src/third_party/VST3_SDK")
 
 add_library(layer3_plugin STATIC
     iplugin_manager.cpp
+    gm_synth_plugin.cpp
     vst3_plugin_impl.cpp
     au_plugin_impl.mm
     clap_plugin_impl.cpp
@@ -17,7 +18,11 @@ add_library(layer3_plugin STATIC
 
 target_link_libraries(layer3_plugin PRIVATE
     layer2_interface
+    FluidSynth::libfluidsynth
 )
+
+# The built-in GM instruments look for their SoundFont in the source checkout during development.
+target_compile_definitions(layer3_plugin PRIVATE "STRATAWRIGHT_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
 
 if(NOT MSVC)
     target_compile_options(layer3_plugin PRIVATE 

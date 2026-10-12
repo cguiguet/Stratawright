@@ -169,6 +169,7 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(libebur128 CONFIG QUIET)
+find_package(FluidSynth CONFIG REQUIRED)  # built-in General MIDI instrument
 
 # Testing frameworks
 if(BUILD_TESTS)

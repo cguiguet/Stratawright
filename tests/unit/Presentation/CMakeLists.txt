@@ -6,9 +6,11 @@ add_executable(presentation_unit_tests
     upstream_pull_requests_test.cpp
     claude_stream_test.cpp
     conversation_store_test.cpp
+    item_view_accessibility_test.cpp
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/updates/upstream_pull_requests.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_stream.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/conversation_store.cpp"
+    "${CMAKE_SOURCE_DIR}/src/Presentation/views/item_view_accessibility.cpp"
 )
 
 target_include_directories(presentation_unit_tests PRIVATE
@@ -18,6 +20,7 @@ target_include_directories(presentation_unit_tests PRIVATE
 target_link_libraries(presentation_unit_tests PRIVATE
     Catch2::Catch2WithMain
     Qt6::Core
+    Qt6::Widgets
 )
 
 # Register tests with CTest

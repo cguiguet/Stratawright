@@ -8,6 +8,7 @@
 #include "Presentation/views/theme.h"
 #include "Presentation/views/updates/upstream_pull_request_notifier.h"
 #include "Presentation/views/relaunch.h"
+#include "Presentation/views/item_view_accessibility.h"
 #include "Middle Bridge/boot/boot_controller.h"
 #include "Agentic layer/server/ipc_server.h"
 #include "Agentic layer/server/command_dispatcher.h"
@@ -229,7 +230,8 @@ bool Application::initializeLayer7() {
 
     m_qapp = std::make_unique<QApplication>(m_argc, m_argv);
     m_qapp->setQuitOnLastWindowClosed(false);
-    
+    presentation::accessibility::installItemViewWorkaround();
+
     // Register custom application fonts before loading any views
     presentation::theme::Font::initialize();
     

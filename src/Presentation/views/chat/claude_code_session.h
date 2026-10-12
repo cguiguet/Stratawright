@@ -9,8 +9,8 @@
 namespace presentation::chat {
 
 // Drives Claude Code in headless mode (`claude -p` with stream-json input and output) as a child
-// process, using the user's own Claude Code login. One process serves the whole conversation; the
-// session id is remembered so a stopped process, or a relaunched app, resumes the conversation.
+// process, using the user's own Claude Code login. One process serves the whole conversation; its
+// session id (kept by the caller, see sessionIdChanged) lets a stopped process resume it.
 class ClaudeCodeSession : public QObject {
     Q_OBJECT
 
@@ -29,13 +29,17 @@ public:
     void send(const QString& text);
     // Kills the running turn. The next message resumes the same conversation.
     void stop();
-    // Stops and forgets the conversation: the next message starts a new one.
-    void newConversation();
+    // Switches to another conversation (empty: a new one); the next message resumes it.
+    void setConversation(const QString& sessionId);
+    void newConversation() { setConversation(QString()); }
+    QString sessionId() const { return sessionId_; }
 
 signals:
     void streamEvent(const presentation::chat::StreamEvent& event);
     void busyChanged(bool busy);
     void failed(const QString& message);
+    // Claude Code assigned (or changed) the session id of the conversation.
+    void sessionIdChanged(const QString& sessionId);
 
 private:
     bool ensureProcess();

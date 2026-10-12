@@ -131,6 +131,7 @@ MainWindow::MainWindow(QWidget* parent)
     sm.bindSequence(this, QKeySequence("Ctrl+J"), toggleChat, Qt::ApplicationShortcut);
     sm.bindSequence(this, QKeySequence("Alt+4"), toggleChat, Qt::ApplicationShortcut);
 
+
     sm.bind(this, ShortcutAction::Global_ToggleMetronome, [this]() {
         if (m_timelineController) {
             m_timelineController->setMetronomeEnabled(!m_timelineController->isMetronomeEnabled());
@@ -259,6 +260,7 @@ void MainWindow::setPlaylistControllers(const PlaylistWindow::Controllers& playl
 
     m_arrangementController = playlistCtrls.arrangement;
     m_lifecycleController = playlistCtrls.lifecycle;
+    m_chatPanel->setProjectContext(playlistCtrls.lifecycle, playlistCtrls.sessionManager);
 
     m_playlistWindow = new PlaylistWindow(playlistCtrls, this);
     m_mainSplitter->insertWidget(0, m_playlistWindow);

@@ -3,7 +3,6 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QProcessEnvironment>
-#include <QSettings>
 #include <QStandardPaths>
 #include <QStringList>
 
@@ -13,8 +12,6 @@ namespace presentation::chat {
 
 namespace {
 
-const QString kSessionKey = QStringLiteral("chat/claudeSessionId");
-const QString kSettingsName = QStringLiteral("Stratawright");
 
 // Apps launched from Finder get a minimal PATH; Claude Code, daw-cli and the build tools live here.
 QStringList toolDirectories() {
@@ -27,9 +24,7 @@ QStringList toolDirectories() {
 } // namespace
 
 ClaudeCodeSession::ClaudeCodeSession(Options options, QObject* parent)
-    : QObject(parent), options_(std::move(options)) {
-    sessionId_ = QSettings(kSettingsName, kSettingsName).value(kSessionKey).toString();
-}
+    : QObject(parent), options_(std::move(options)) {}
 
 ClaudeCodeSession::~ClaudeCodeSession() {
     if (process_) {
@@ -122,9 +117,9 @@ void ClaudeCodeSession::stop() {
     setBusy(false);
 }
 
-void ClaudeCodeSession::newConversation() {
-    stop();
-    rememberSession(QString());
+void ClaudeCodeSession::setConversation(const QString& sessionId) {
+    stop();  // the running process belongs to the previous conversation
+    sessionId_ = sessionId;
 }
 
 void ClaudeCodeSession::onStandardOutput() {
@@ -171,16 +166,11 @@ void ClaudeCodeSession::setBusy(bool busy) {
 }
 
 void ClaudeCodeSession::rememberSession(const QString& sessionId) {
-    if (sessionId == sessionId_) {
+    if (sessionId.isEmpty() || sessionId == sessionId_) {
         return;
     }
     sessionId_ = sessionId;
-    QSettings settings(kSettingsName, kSettingsName);
-    if (sessionId.isEmpty()) {
-        settings.remove(kSessionKey);
-    } else {
-        settings.setValue(kSessionKey, sessionId);
-    }
+    emit sessionIdChanged(sessionId);
 }
 
 } // namespace presentation::chat

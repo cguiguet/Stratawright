@@ -3,7 +3,11 @@
 #include "assistant_instructions.h"
 #include "claude_code_session.h"
 
+#include "Middle Bridge/project/iproject_lifecycle_controller.h"
+#include "Middle Bridge/project/isession_manager.h"
+
 #include <QDir>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -12,6 +16,7 @@
 #include <QScrollBar>
 #include <QTextBrowser>
 #include <QTextCursor>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace presentation::chat {
@@ -28,6 +33,7 @@ const char* const kPanelStyle = R"(
     QPushButton:disabled { color: #666666; }
     QPushButton#sendButton { background-color: #a78bfa; color: #161616; font-weight: bold; }
     QLabel#chatStatus { color: #888888; font-size: 11px; }
+    QLabel#chatProject { color: #a78bfa; font-size: 12px; font-weight: bold; }
 )";
 
 QString escaped(const QString& text) {
@@ -64,6 +70,8 @@ ChatPanel::ChatPanel(QWidget* parent) : QWidget(parent) {
 
     statusLabel_ = new QLabel(QStringLiteral("Claude Code"), this);
     statusLabel_->setObjectName(QStringLiteral("chatStatus"));
+    projectLabel_ = new QLabel(this);
+    projectLabel_->setObjectName(QStringLiteral("chatProject"));
 
     auto* buttons = new QHBoxLayout();
     buttons->addWidget(newButton);
@@ -75,6 +83,7 @@ ChatPanel::ChatPanel(QWidget* parent) : QWidget(parent) {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(6);
+    layout->addWidget(projectLabel_);
     layout->addWidget(transcript_, 1);
     layout->addWidget(input_);
     layout->addLayout(buttons);
@@ -85,13 +94,111 @@ ChatPanel::ChatPanel(QWidget* parent) : QWidget(parent) {
     connect(newButton, &QPushButton::clicked, this, [this]() {
         session_->newConversation();
         transcript_->clear();
+        conversation_.sessionId.clear();
         sessionCostUsd_ = 0.0;
         statusLabel_->setText(QStringLiteral("New conversation"));
+        saveConversation();
     });
     connect(relaunchButton, &QPushButton::clicked, this, &ChatPanel::relaunchRequested);
     connect(session_, &ClaudeCodeSession::streamEvent, this, &ChatPanel::onStreamEvent);
     connect(session_, &ClaudeCodeSession::busyChanged, this, &ChatPanel::onBusyChanged);
     connect(session_, &ClaudeCodeSession::failed, this, &ChatPanel::showError);
+    connect(session_, &ClaudeCodeSession::sessionIdChanged, this, [this](const QString& sessionId) {
+        conversation_.sessionId = sessionId;
+        scheduleSave();
+    });
+
+    saveTimer_ = new QTimer(this);
+    saveTimer_->setSingleShot(true);
+    saveTimer_->setInterval(400);
+    connect(saveTimer_, &QTimer::timeout, this, &ChatPanel::saveConversation);
+
+    // Until the project is known, show the never-saved project's conversation.
+    switchTo(store_.load(QString()));
+}
+
+void ChatPanel::setProjectContext(bridge::IProjectLifecycleController* lifecycle, bridge::ISessionManager* sessions) {
+    lifecycle_ = lifecycle;
+    sessions_ = sessions;
+    if (!projectWatch_) {
+        // Polled rather than notified: the path only settles after the session switch (open,
+        // relaunch restore) and also changes on "save as". The first check runs after startup work.
+        projectWatch_ = new QTimer(this);
+        projectWatch_->setInterval(1000);
+        connect(projectWatch_, &QTimer::timeout, this, &ChatPanel::checkProject);
+        projectWatch_->start();
+    }
+}
+
+void ChatPanel::checkProject() {
+    if (!lifecycle_ || !sessions_) {
+        return;
+    }
+    const void* session = sessions_->getActiveSession();
+    const QString path = QString::fromStdString(lifecycle_->getCurrentProjectPath());
+    if (session == watchedSession_ && path == conversation_.projectPath) {
+        return;
+    }
+    const bool firstCheck = (watchedSession_ == nullptr);
+    const bool sameProject = (session == watchedSession_);
+    watchedSession_ = session;
+
+    if (sameProject) {
+        // Saved under a new path: the conversation follows the project.
+        const QString previousPath = conversation_.projectPath;
+        conversation_.projectPath = path;
+        saveConversation();
+        if (previousPath.isEmpty()) {
+            store_.remove(previousPath);
+        }
+        updateProjectLabel();
+        return;
+    }
+    if (path.isEmpty() && !firstCheck) {
+        switchTo(Conversation{});  // a new project starts a new conversation
+        return;
+    }
+    switchTo(store_.load(path));  // opened, or restored after a relaunch
+}
+
+void ChatPanel::switchTo(const Conversation& conversation) {
+    if (saveTimer_ && saveTimer_->isActive()) {
+        saveTimer_->stop();
+        saveConversation();
+    }
+    conversation_ = conversation;
+    session_->setConversation(conversation.sessionId);
+    if (conversation.transcriptHtml.isEmpty()) {
+        transcript_->clear();
+    } else {
+        transcript_->setHtml(conversation.transcriptHtml);
+        transcript_->verticalScrollBar()->setValue(transcript_->verticalScrollBar()->maximum());
+    }
+    sessionCostUsd_ = 0.0;
+    updateProjectLabel();
+}
+
+void ChatPanel::scheduleSave() {
+    saveTimer_->start();
+}
+
+void ChatPanel::saveConversation() {
+    conversation_.transcriptHtml = transcript_->document()->isEmpty() ? QString() : transcript_->toHtml();
+    if (conversation_.sessionId.isEmpty() && conversation_.transcriptHtml.isEmpty()) {
+        store_.remove(conversation_.projectPath);
+        return;
+    }
+    store_.save(conversation_);
+}
+
+void ChatPanel::updateProjectLabel() {
+    const QString name = conversation_.projectPath.isEmpty()
+        ? QStringLiteral("Untitled project")
+        : QFileInfo(conversation_.projectPath).completeBaseName();
+    projectLabel_->setText(QStringLiteral("Chat · %1").arg(name));
+    projectLabel_->setToolTip(conversation_.projectPath.isEmpty()
+        ? QStringLiteral("This conversation moves to the project when you save it.")
+        : conversation_.projectPath);
 }
 
 void ChatPanel::focusInput() {
@@ -179,6 +286,7 @@ void ChatPanel::appendHtml(const QString& html) {
     cursor.insertBlock();
     cursor.insertHtml(html);
     transcript_->verticalScrollBar()->setValue(transcript_->verticalScrollBar()->maximum());
+    scheduleSave();
 }
 
 void ChatPanel::appendMarkdown(const QString& markdown) {
@@ -187,6 +295,7 @@ void ChatPanel::appendMarkdown(const QString& markdown) {
     cursor.insertBlock();
     cursor.insertMarkdown(markdown);
     transcript_->verticalScrollBar()->setValue(transcript_->verticalScrollBar()->maximum());
+    scheduleSave();
 }
 
 } // namespace presentation::chat

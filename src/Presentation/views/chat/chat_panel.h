@@ -1,20 +1,29 @@
 #pragma once
 
 #include "claude_stream.h"
+#include "conversation_store.h"
 
 #include <QWidget>
 
 class QLabel;
+class QTimer;
 class QPlainTextEdit;
 class QPushButton;
 class QTextBrowser;
+
+namespace bridge {
+class IProjectLifecycleController;
+class ISessionManager;
+}
 
 namespace presentation::chat {
 
 class ClaudeCodeSession;
 
 // Chat with Claude Code from inside the app: it can drive the open project through daw-cli and
-// change the app's own code. See ClaudeCodeSession for how Claude Code is run.
+// change the app's own code. See ClaudeCodeSession for how Claude Code is run. Each project has its
+// own conversation (ConversationStore): opening another project switches to its conversation, and
+// saving a project under a new path takes the conversation along.
 class ChatPanel : public QWidget {
     Q_OBJECT
 
@@ -23,6 +32,8 @@ public:
 
     void focusInput();
     void showError(const QString& message);
+    // Follows the open project to show its conversation.
+    void setProjectContext(bridge::IProjectLifecycleController* lifecycle, bridge::ISessionManager* sessions);
 
 signals:
     // The user asked to restart the app (to load a rebuilt version).
@@ -37,6 +48,11 @@ private:
     void onBusyChanged(bool busy);
     void appendHtml(const QString& html);
     void appendMarkdown(const QString& markdown);
+    void checkProject();
+    void switchTo(const Conversation& conversation);
+    void scheduleSave();
+    void saveConversation();
+    void updateProjectLabel();
 
     ClaudeCodeSession* session_ = nullptr;
     QTextBrowser* transcript_ = nullptr;
@@ -44,6 +60,14 @@ private:
     QPushButton* sendButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
     QLabel* statusLabel_ = nullptr;
+    QLabel* projectLabel_ = nullptr;
+    ConversationStore store_;
+    Conversation conversation_;
+    bridge::IProjectLifecycleController* lifecycle_ = nullptr;
+    bridge::ISessionManager* sessions_ = nullptr;
+    const void* watchedSession_ = nullptr;
+    QTimer* projectWatch_ = nullptr;
+    QTimer* saveTimer_ = nullptr;
     QString model_;
     double sessionCostUsd_ = 0.0;
 };

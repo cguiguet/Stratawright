@@ -643,6 +643,20 @@ bool CompositionRoot::connectAudioToBridges() {
     //    whereas two devices drift apart and RtAudio drops or repeats buffers (clicks in takes).
     //    Otherwise input is the device with the most input channels (a USB audio interface beats
     //    the built-in mic), ties going to the default input.
+    //    Devices that cannot run at the engine's rate are skipped: a Bluetooth headset microphone
+    //    only runs at 16 kHz, and opening it made the whole stream fail.
+    constexpr uint32_t kEngineSampleRate = 44100;
+    const auto runsAtEngineRate = [](const Layer1::DeviceInfo& info) {
+        if (info.numSampleRates == 0) {
+            return true;  // rates unknown: let the open decide
+        }
+        for (uint32_t r = 0; r < info.numSampleRates; ++r) {
+            if (info.supportedSampleRates[r] == kEngineSampleRate) {
+                return true;
+            }
+        }
+        return false;
+    };
     uint32_t inputIndex = Layer1::UNUSED_DEVICE_INDEX;
     uint32_t outputIndex = Layer1::UNUSED_DEVICE_INDEX;
     uint32_t inputChannels = 0;
@@ -651,7 +665,7 @@ bool CompositionRoot::connectAudioToBridges() {
     const uint32_t deviceCount = audioDriver_->getDeviceCount();
     for (uint32_t i = 0; i < deviceCount; ++i) {
         const Layer1::DeviceInfo info = audioDriver_->getDeviceInfo(i);
-        if (info.isDefaultOutput && info.maxOutputChannels >= 2 && info.maxInputChannels > 0) {
+        if (info.isDefaultOutput && info.maxOutputChannels >= 2 && info.maxInputChannels > 0 && runsAtEngineRate(info)) {
             inputIndex = i;
             outputIndex = i;
             inputChannels = std::min(2U, info.maxInputChannels);
@@ -661,6 +675,9 @@ bool CompositionRoot::connectAudioToBridges() {
     const bool singleDevice = outputIndex != Layer1::UNUSED_DEVICE_INDEX;
     for (uint32_t i = 0; i < deviceCount && !singleDevice; ++i) {
         const Layer1::DeviceInfo info = audioDriver_->getDeviceInfo(i);
+        if (!runsAtEngineRate(info)) {
+            continue;
+        }
         if (info.maxOutputChannels >= 2
             && (outputIndex == Layer1::UNUSED_DEVICE_INDEX || info.isDefaultOutput)) {
             outputIndex = i;
@@ -689,7 +706,7 @@ bool CompositionRoot::connectAudioToBridges() {
     config.outputDeviceIndex = outputIndex;
     config.numInputChannels = inputChannels;
     config.numOutputChannels = 2;
-    config.sampleRate = 44100;
+    config.sampleRate = kEngineSampleRate;
     config.bufferSize = 512;
     config.client = audioEngine_.get();
 

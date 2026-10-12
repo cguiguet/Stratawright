@@ -655,20 +655,30 @@ bool CompositionRoot::connectAudioToBridges() {
     //    whereas two devices drift apart and RtAudio drops or repeats buffers (clicks in takes).
     //    Otherwise input is the device with the most input channels (a USB audio interface beats
     //    the built-in mic), ties going to the default input.
-    //    Devices that cannot run at the engine's rate are skipped: a Bluetooth headset microphone
-    //    only runs at 16 kHz, and opening it made the whole stream fail.
-    constexpr uint32_t engineSampleRate = kPreferredSampleRate;
-    const auto runsAtEngineRate = [](const Layer1::DeviceInfo& info) {
+    //    The engine runs at 44.1 kHz when the output allows it, otherwise at the output's own rate
+    //    (Bluetooth headphones only run at 48 kHz). Devices that cannot run at the engine's rate
+    //    are skipped: a Bluetooth headset microphone only runs at 16 kHz, and opening it made the
+    //    whole stream fail.
+    const auto runsAt = [](const Layer1::DeviceInfo& info, uint32_t rate) {
         if (info.numSampleRates == 0) {
             return true;  // rates unknown: let the open decide
         }
         for (uint32_t r = 0; r < info.numSampleRates; ++r) {
-            if (info.supportedSampleRates[r] == engineSampleRate) {
+            if (info.supportedSampleRates[r] == rate) {
                 return true;
             }
         }
         return false;
     };
+    uint32_t engineSampleRate = kPreferredSampleRate;
+    for (uint32_t i = 0; i < audioDriver_->getDeviceCount(); ++i) {
+        const Layer1::DeviceInfo info = audioDriver_->getDeviceInfo(i);
+        if (info.isDefaultOutput && info.maxOutputChannels >= 2 && !runsAt(info, kPreferredSampleRate)) {
+            engineSampleRate = info.defaultSampleRate != 0 ? info.defaultSampleRate
+                                                           : info.supportedSampleRates[info.numSampleRates - 1];
+        }
+    }
+    const auto runsAtEngineRate = [&](const Layer1::DeviceInfo& info) { return runsAt(info, engineSampleRate); };
     uint32_t inputIndex = Layer1::UNUSED_DEVICE_INDEX;
     uint32_t outputIndex = Layer1::UNUSED_DEVICE_INDEX;
     uint32_t inputChannels = 0;
@@ -704,12 +714,12 @@ bool CompositionRoot::connectAudioToBridges() {
         }
     }
     if (outputIndex == Layer1::UNUSED_DEVICE_INDEX) {
-        std::cerr << "CompositionRoot: Warning - the system default output cannot run at " << engineSampleRate
-                  << " Hz right now (e.g. Bluetooth headphones at 48 kHz); audio stays off rather than playing on another device."
+        std::cerr << "CompositionRoot: Warning - no usable system default output; audio stays off rather than playing on another device."
                   << std::endl;
         return true;
     }
-    std::cout << "CompositionRoot: Audio output device: " << audioDriver_->getDeviceInfo(outputIndex).name << std::endl;
+    std::cout << "CompositionRoot: Audio output device: " << audioDriver_->getDeviceInfo(outputIndex).name
+              << " at " << engineSampleRate << " Hz" << std::endl;
     if (inputIndex != Layer1::UNUSED_DEVICE_INDEX) {
         std::cout << "CompositionRoot: Audio input device: " << audioDriver_->getDeviceInfo(inputIndex).name
                   << " (" << inputChannels << " ch)" << std::endl;
@@ -732,7 +742,18 @@ bool CompositionRoot::connectAudioToBridges() {
         // Don't fail the entire startup sequence - let GUI boot up
     } else {
         std::cout << "CompositionRoot: Audio hardware stream opened successfully. Starting playback thread..." << std::endl;
-        updateRecordingLatency();
+        const uint32_t openedRate = audioDriver_->getStreamConfig().sampleRate != 0
+            ? audioDriver_->getStreamConfig().sampleRate : engineSampleRate;
+        if (openedRate != kPreferredSampleRate) {
+            // The project was set up at 44.1 kHz: move it and everything else to the stream's rate.
+            audioEngine_->prepare(openedRate, config.bufferSize);
+            if (auto* session = sessionManager_ ? sessionManager_->getActiveSession() : nullptr) {
+                session->convertSampleRate(openedRate);
+            }
+            onEngineSampleRateChanged(kPreferredSampleRate, openedRate);
+        } else {
+            updateRecordingLatency();
+        }
         if (!audioDriver_->startStream()) {
             std::cerr << "CompositionRoot: Failed to start audio hardware stream callback" << std::endl;
         }

@@ -86,6 +86,15 @@ Commands accepting track parameters (`--track`, `--tracks`, `--to-tracks`) suppo
 
 ### 1. Session State & Transport
 
+#### Project Info / Save
+```bash
+daw-cli project info                                   # path ("(never saved)" if new) and unsaved_changes
+daw-cli project save                                   # save to the current path
+daw-cli project save --path ~/Music/song.agdaw         # first save / save as
+```
+- **Success Symbols**: `PROJECT_INFO`, `PROJECT_SAVED`. Opening a project is done from the UI.
+
+
 #### Status Query
 Returns current playback status, tempo, time signature, and playhead position.
 ```bash

@@ -3,6 +3,7 @@
 #include "handlers/analysis_handler.h"
 #include "handlers/clip_handler.h"
 #include "handlers/plugin_handler.h"
+#include "handlers/project_handler.h"
 #include "handlers/rendering_handler.h"
 #include "handlers/routing_handler.h"
 #include "handlers/track_handler.h"
@@ -32,6 +33,7 @@ void CommandDispatcher::registerHandlers() {
     m_verbHandlers["plugin"]    = [this](const ParsedArgs& args) { return PluginHandler::handleCommand(args, m_controllers.trackController, m_controllers.browserController); };
     m_verbHandlers["clip"]      = [this](const ParsedArgs& args) { return ClipHandler::handleCommand(args, m_controllers.arrangementController, m_controllers.midiEditorController, m_controllers.timelineController); };
     m_verbHandlers["midi"]      = [this](const ParsedArgs& args) { return ClipHandler::handleCommand(args, m_controllers.arrangementController, m_controllers.midiEditorController, m_controllers.timelineController); };
+    m_verbHandlers["project"]   = [this](const ParsedArgs& args) { return ProjectHandler::handleCommand(args, m_controllers.projectLifecycleController); };
     m_verbHandlers["route"]     = [this](const ParsedArgs& args) { return RoutingHandler::handleCommand(args, m_controllers.trackController); };
     m_verbHandlers["analyze"]   = [this](const ParsedArgs& args) { return AnalysisHandler::handleCommand(args, m_controllers.analysisController); };
     m_verbHandlers["export"]    = [this](const ParsedArgs& args) {

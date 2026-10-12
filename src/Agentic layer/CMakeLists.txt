@@ -20,6 +20,7 @@ add_library(agentic_server STATIC
     server/handlers/routing_handler.cpp
     server/handlers/analysis_handler.cpp
     server/handlers/rendering_handler.cpp
+    server/handlers/project_handler.cpp
 )
 
 target_link_libraries(agentic_server PRIVATE

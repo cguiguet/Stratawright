@@ -8,6 +8,7 @@ class IArrangementController;
 class IMidiEditorController;
 class IAnalysisController;
 class IRenderController;
+class IProjectLifecycleController;
 } // namespace bridge
 
 namespace agentic {
@@ -20,6 +21,7 @@ struct BridgeControllers {
     bridge::IMidiEditorController* midiEditorController{nullptr};
     bridge::IAnalysisController* analysisController{nullptr};
     bridge::IRenderController* renderController{nullptr};
+    bridge::IProjectLifecycleController* projectLifecycleController{nullptr};
 };
 
 } // namespace agentic

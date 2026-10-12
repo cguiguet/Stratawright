@@ -556,6 +556,9 @@ void PlaylistImpl::copyFrom(const PlaylistImpl* other) {
 }
 
 void PlaylistImpl::restoreRegion(RegionID id, const TimelineRegion& region, LayerIndex layer) {
+    if (region.type == RegionType::MIDI) {
+        reserveClipId(region.sourceId.id);
+    }
     addRegionInternal(region, layer, id, false);
 }
 

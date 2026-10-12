@@ -536,11 +536,13 @@ void MIDISequencerImpl::convertSampleRate(const SampleRateConversion& convert) {
 }
 
 void MIDISequencerImpl::restoreClipPosition(const ClipPositionEntry& entry) {
+    reserveClipId(entry.clipId.id);
     clipPositions_.push_back(entry);
     syncRTBuffer();
 }
 
 void MIDISequencerImpl::restoreNote(const NoteEntry& entry) {
+    reserveClipId(entry.clipId.id);
     notes_.push_back(entry);
     if (entry.noteId.id > nextIdCounter_) {
         nextIdCounter_ = entry.noteId.id;
@@ -549,11 +551,13 @@ void MIDISequencerImpl::restoreNote(const NoteEntry& entry) {
 }
 
 void MIDISequencerImpl::restoreCCPoint(const CCEntry& entry) {
+    reserveClipId(entry.clipId.id);
     ccPoints_.push_back(entry);
     syncRTBuffer();
 }
 
 void MIDISequencerImpl::restorePitchPoint(const PitchEntry& entry) {
+    reserveClipId(entry.clipId.id);
     pitchPoints_.push_back(entry);
     syncRTBuffer();
 }

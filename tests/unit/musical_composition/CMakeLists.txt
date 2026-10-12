@@ -12,6 +12,7 @@ add_executable(musical_composition_unit_tests
     track_sidechain_test.cpp
     plugin_teardown_test.cpp
     sample_rate_conversion_test.cpp
+    midi_clip_ids_test.cpp
 )
 
 target_include_directories(musical_composition_unit_tests PRIVATE

@@ -18,6 +18,16 @@ inline std::atomic<uint32_t>& getGlobalClipIdCounter() {
     return counter;
 }
 
+// MIDI clip ids come from that process-wide counter, which starts over at each launch. A loaded
+// project already uses some ids: the counter must move past them, or a new clip would get the id
+// of an existing one and share its notes.
+inline void reserveClipId(uint32_t id) {
+    auto& counter = getGlobalClipIdCounter();
+    uint32_t current = counter.load();
+    while (current < id && !counter.compare_exchange_weak(current, id)) {
+    }
+}
+
 /**
  * @brief Helper to convert handles to uint64_t for storage or delta payloads.
  */

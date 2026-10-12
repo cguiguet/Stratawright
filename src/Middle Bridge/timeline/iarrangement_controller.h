@@ -1,4 +1,6 @@
 #pragma once
+
+#include <string>
 #include "common/system_primitives.h"
 #include "musical_composition/musical_primitives.h"
 #include "musical_composition/track_manager/itrack_manager.h"
@@ -56,6 +58,8 @@ public:
     virtual RegionID moveRegion(RegionID regionId, TrackID destTrack, int64_t newStartFrame, uint32_t destLayer = 0xFFFFFFFF) = 0;
     virtual void trimRegion(RegionID regionId, uint64_t newPosition, uint64_t newSourceStart, uint64_t newDuration) = 0;
     virtual bool getVisualRegion(RegionID regionId, VisualRegion& outRegion) const = 0;
+    // Source file of an audio region (empty if unknown or not audio).
+    virtual std::string getRegionSourcePath(RegionID /*regionId*/) const { return {}; }
     // Copy an audio region (same source file, trim, gain, fades, mute) to targetStartFrame on its track.
     virtual RegionID duplicateAudioRegion(RegionID /*regionId*/, uint64_t /*targetStartFrame*/) { return RegionID::invalid(); }
 

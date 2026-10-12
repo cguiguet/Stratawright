@@ -751,7 +751,11 @@ ExecutionResult ClipHandler::handleCommand(
                     {"START_FRAME", std::to_string(r.startFrame)},
                     {"DURATION_FRAMES", std::to_string(r.durationFrames)},
                     {"GAIN_DB", std::to_string(dbGain)},
-                    {"MUTED", r.isMuted ? "true" : "false"}
+                    {"MUTED", r.isMuted ? "true" : "false"},
+                    // Where the clip's audio comes from: the file, and the frame of that file that
+                    // plays at START_FRAME (latency compensation and trims move it).
+                    {"SOURCE_OFFSET_FRAMES", std::to_string(r.fileOffsetFrames)},
+                    {"PATH", arrangementController->getRegionSourcePath(r.id)}
                 });
             }
 

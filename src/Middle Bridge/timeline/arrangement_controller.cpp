@@ -1026,11 +1026,11 @@ void ArrangementController::onSessionChanged(composition::IProjectSession* sessi
     }
 }
 
-RegionID ArrangementController::duplicateAudioRegion(RegionID regionId, uint64_t targetStartFrame) {
+std::string ArrangementController::getRegionSourcePath(RegionID regionId) const {
     composition::IPlaylist::RegionInfo info{};
     TrackID trackId = TrackID::invalid();
     if (!findPlaylistForRegion(regionId, info, trackId) || info.region.type != composition::RegionType::AUDIO) {
-        return RegionID::invalid();
+        return {};
     }
 
     // The region only knows its source id; the file path lives in the source descriptor.
@@ -1038,16 +1038,20 @@ RegionID ArrangementController::duplicateAudioRegion(RegionID regionId, uint64_t
     composition::AudioSourceDescriptor desc;
     std::string filePath;
     if (!sourceManager || !stringRegistry_ || !sourceManager->getSource(info.region.sourceId, desc)
-        || !stringRegistry_->getString(desc.nameId, filePath) || filePath.empty()) {
-        return RegionID::invalid();
+        || !stringRegistry_->getString(desc.nameId, filePath)) {
+        return {};
     }
+    return filePath;
+}
 
+RegionID ArrangementController::duplicateAudioRegion(RegionID regionId, uint64_t targetStartFrame) {
+    const std::string filePath = getRegionSourcePath(regionId);
     VisualRegion original{};
-    if (!getVisualRegion(regionId, original)) {
+    if (filePath.empty() || !getVisualRegion(regionId, original)) {
         return RegionID::invalid();
     }
 
-    RegionID copy = importAudioClip(trackId, filePath.c_str(), targetStartFrame);
+    RegionID copy = importAudioClip(original.trackId, filePath.c_str(), targetStartFrame);
     if (!copy.isValid()) {
         return copy;
     }

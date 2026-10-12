@@ -201,6 +201,16 @@ void ChatPanel::updateProjectLabel() {
         : conversation_.projectPath);
 }
 
+void ChatPanel::insertReference(const QString& reference) {
+    QString text = input_->toPlainText();
+    if (!text.isEmpty() && !text.endsWith(QLatin1Char('\n'))) {
+        text += QLatin1Char('\n');
+    }
+    input_->setPlainText(text + reference + QLatin1Char('\n'));
+    input_->moveCursor(QTextCursor::End);
+    input_->setFocus();
+}
+
 void ChatPanel::focusInput() {
     input_->setFocus();
 }

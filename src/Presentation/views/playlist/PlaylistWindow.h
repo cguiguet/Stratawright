@@ -108,6 +108,13 @@ public:
      */
     void onSessionChanged(composition::IProjectSession* newSession) override;
 
+    /**
+     * @brief The selected clips (or, without any, the selected tracks) as references for the chat:
+     * one line each with the ids daw-cli uses, the track, the kind and the bars. Empty if nothing
+     * is selected.
+     */
+    QString describeSelectionForChat() const;
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;

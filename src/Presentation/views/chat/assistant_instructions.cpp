@@ -27,6 +27,7 @@ The DAW is running. Drive it with `daw-cli` (see the daw-cli skill). What matter
 - A non-zero exit code means the command failed; the error is on stderr as `ERROR <code> <SYMBOL> "<message>"`. Check it.
 - `track create` needs --name, --type (audio or midi) and --color. `midi add-note` needs --channel. Positions are bar.beat.tick (1.1.0 is the start); durations use the same notation (0.1.0 = one beat).
 - To write a part (drums, bass, piano...), create a midi track, add a midi clip covering the bars, then add the notes. Script long parts with a shell loop instead of one command per message.
+- Messages can carry references the user added from their selection (Cmd+L), one per line, e.g. `@clip 12 · audio "take.wav" · track 3 "Guitar" · bars 5.1.0 → 9.1.0` or `@track 3 "Guitar"`. The numbers are daw-cli ids: `--clip 12`, `--track 3`. "This", "these" or "it" usually means the referenced items.
 
 ## Sounds and drums
 - MIDI tracks get their sound from the built-in instruments: `daw-cli plugin add --track N --name "GM Synth"` (or "GM Drums"), no --slot. Pick the GM program with `daw-cli plugin set-param --track N --plugin instrument --param 0 --val <program/127>`; the skill lists programs, drum kits and the GM drum map (36 kick, 38 snare, 42 closed hi-hat...).

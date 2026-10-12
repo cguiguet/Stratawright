@@ -131,6 +131,19 @@ MainWindow::MainWindow(QWidget* parent)
     sm.bindSequence(this, QKeySequence("Ctrl+J"), toggleChat, Qt::ApplicationShortcut);
     sm.bindSequence(this, QKeySequence("Alt+4"), toggleChat, Qt::ApplicationShortcut);
 
+    // Add the selection (clips, or tracks) to the chat as references Claude can act on.
+    const auto addSelectionToChat = [this]() {
+        const QString references = m_playlistWindow ? m_playlistWindow->describeSelectionForChat() : QString();
+        m_chatDock->setVisible(true);
+        if (references.isEmpty()) {
+            m_chatPanel->showError(QStringLiteral("Select clips or tracks first, then press Cmd+L to add them to the message."));
+            m_chatPanel->focusInput();
+            return;
+        }
+        m_chatPanel->insertReference(references);
+    };
+    sm.bindSequence(this, QKeySequence("Ctrl+L"), addSelectionToChat, Qt::ApplicationShortcut);
+    sm.bindSequence(this, QKeySequence("Alt+5"), addSelectionToChat, Qt::ApplicationShortcut);
 
     sm.bind(this, ShortcutAction::Global_ToggleMetronome, [this]() {
         if (m_timelineController) {

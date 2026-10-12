@@ -34,6 +34,8 @@ public:
     void showError(const QString& message);
     // Follows the open project to show its conversation.
     void setProjectContext(bridge::IProjectLifecycleController* lifecycle, bridge::ISessionManager* sessions);
+    // Adds a reference to something in the project (e.g. the selection) to the message being typed.
+    void insertReference(const QString& reference);
 
 signals:
     // The user asked to restart the app (to load a rebuilt version).

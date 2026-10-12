@@ -1943,4 +1943,53 @@ void PlaylistWindow::openRenderJobsDialog() {
     m_renderJobsDialog->activateWindow();
 }
 
+QString PlaylistWindow::describeSelectionForChat() const {
+    QStringList lines;
+    const auto bars = [this](uint64_t frame) {
+        uint32_t bar = 1, beat = 1, tick = 0;
+        if (m_ctrl.timeline) {
+            m_ctrl.timeline->frameToBBT(frame, bar, beat, tick);
+        }
+        return QStringLiteral("%1.%2.%3").arg(bar).arg(beat).arg(tick);
+    };
+    const auto trackName = [this](TrackID trackId) {
+        return m_ctrl.track ? QString::fromUtf8(m_ctrl.track->getTrackState(trackId).name) : QString();
+    };
+
+    if (m_canvas && m_ctrl.arrangement) {
+        std::vector<bridge::VisualRegion> clips;
+        for (uint64_t rawId : m_canvas->getSelectedRegions()) {
+            bridge::VisualRegion region{};
+            if (m_ctrl.arrangement->getVisualRegion(composition::uint64ToHandle<bridge::RegionID>(rawId), region)) {
+                clips.push_back(region);
+            }
+        }
+        std::sort(clips.begin(), clips.end(), [](const bridge::VisualRegion& a, const bridge::VisualRegion& b) {
+            return a.trackId.id != b.trackId.id ? a.trackId.id < b.trackId.id : a.startFrame < b.startFrame;
+        });
+        for (const auto& clip : clips) {
+            const bool audio = clip.clipType == composition::RegionType::AUDIO;
+            const bool midi = clip.clipType == composition::RegionType::MIDI;
+            QString kind = audio ? QStringLiteral("audio") : midi ? QStringLiteral("MIDI") : QStringLiteral("automation");
+            if (audio && clip.name[0] != '\0') {
+                kind += QStringLiteral(" \"%1\"").arg(QString::fromUtf8(clip.name));
+            }
+            lines << QStringLiteral("@clip %1 · %2 · track %3 \"%4\" · bars %5 → %6")
+                         .arg(clip.id.id)
+                         .arg(kind)
+                         .arg(clip.trackId.id)
+                         .arg(trackName(clip.trackId), bars(clip.startFrame), bars(clip.startFrame + clip.durationFrames));
+        }
+    }
+
+    if (lines.isEmpty() && m_ctrl.track) {
+        for (const auto& track : m_ctrl.track->getAllTracks()) {
+            if (track.isSelected) {
+                lines << QStringLiteral("@track %1 \"%2\"").arg(track.trackId.id).arg(QString::fromUtf8(track.name));
+            }
+        }
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
 } // namespace presentation::views

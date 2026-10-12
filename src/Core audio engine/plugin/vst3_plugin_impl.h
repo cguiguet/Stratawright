@@ -22,7 +22,7 @@ using ExitDllProc = bool (*)();
 
 class VST3PluginImpl : public IPlugin {
 public:
-  VST3PluginImpl(const char *path);
+  explicit VST3PluginImpl(const char *path, double sampleRate = 44100.0);
   ~VST3PluginImpl() override;
 
   void setButlerThread(IButlerThread* butler) { m_butler = butler; }
@@ -115,6 +115,7 @@ private:
   std::atomic<bool> m_isStateLoading{false};
   bool m_isInitialized = false;
   double m_currentSampleRate = 0.0;
+  double m_sampleRate = 44100.0; // rate the plugin is set up at
   uint32_t m_currentMaxBlockSize = 0;
   char m_name[MAX_PLUGIN_NAME_LENGTH] = {0};
 

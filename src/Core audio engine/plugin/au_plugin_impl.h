@@ -20,7 +20,7 @@ namespace Layer3 {
 
 class AUPluginImpl : public IPlugin {
 public:
-  AUPluginImpl(const char *path);
+  explicit AUPluginImpl(const char *path, double sampleRate = 44100.0);
   ~AUPluginImpl() override;
 
   void setButlerThread(IButlerThread* butler) { m_butler = butler; }
@@ -62,6 +62,7 @@ private:
   uint32_t m_currentNumInputs = 0;
   uint64_t m_continuousSampleTime = 0; // Added for continuous clock
   bool m_isInstrument = false;
+  double m_sampleRate = 44100.0; // rate the stream format is set up at
   EventData* m_currentOutEvents = nullptr;
   uint32_t* m_currentOutCount = nullptr;
   static OSStatus midiOutputCallback(void *userData, const ::AudioTimeStamp *timeStamp, UInt32 midiOutNum, const ::MIDIPacketList *pktlist);

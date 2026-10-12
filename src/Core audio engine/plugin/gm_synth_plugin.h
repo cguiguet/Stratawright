@@ -23,7 +23,7 @@ public:
     static constexpr const char* kSynthPath = "builtin:gm-synth";
     static constexpr const char* kDrumsPath = "builtin:gm-drums";
 
-    explicit GMSynthPlugin(Mode mode);
+    explicit GMSynthPlugin(Mode mode, double sampleRate = 44100.0);
     ~GMSynthPlugin() override;
 
     GMSynthPlugin(const GMSynthPlugin&) = delete;
@@ -49,16 +49,24 @@ public:
     bool openEditor(void* /*parentWindow*/, int& /*outWidth*/, int& /*outHeight*/) override { return false; }
     void closeEditor() override {}
 
+    // Recreates the synth at the new rate (FluidSynth cannot change it in place), keeping the
+    // program and volume.
+    void setSampleRate(double sampleRate) override;
+    double sampleRate() const { return sampleRate_; }
+
     // SoundFont used by both instruments: $STRATAWRIGHT_SOUNDFONT, then the app bundle's
     // Resources/soundfonts, then the source checkout's src/third_party/soundfonts.
     static std::string soundFontPath();
 
 private:
     void render(float* const* outputs, uint32_t from, uint32_t to);
+    void createSynth();
+    void destroySynth();
     void applyProgramIfChanged();
     int channel() const { return mode_ == Mode::Drums ? 9 : 0; }
 
     Mode mode_;
+    double sampleRate_;
     fluid_settings_t* settings_ = nullptr;
     fluid_synth_t* synth_ = nullptr;
     int soundFontId_ = -1;

@@ -19,7 +19,6 @@ namespace {
 
 constexpr uint32_t kProgramParam = 0;
 constexpr uint32_t kVolumeParam = 1;
-constexpr double kEngineSampleRate = 44100.0;
 constexpr int kDrumBank = 128;  // GM percussion bank in GS SoundFonts
 constexpr const char* kSoundFontFile = "GeneralUser-GS.sf2";
 
@@ -59,9 +58,26 @@ std::string GMSynthPlugin::soundFontPath() {
     return {};
 }
 
-GMSynthPlugin::GMSynthPlugin(Mode mode) : mode_(mode) {
+GMSynthPlugin::GMSynthPlugin(Mode mode, double sampleRate) : mode_(mode), sampleRate_(sampleRate) {
+    createSynth();
+}
+
+GMSynthPlugin::~GMSynthPlugin() {
+    destroySynth();
+}
+
+void GMSynthPlugin::setSampleRate(double sampleRate) {
+    if (sampleRate <= 0.0 || sampleRate == sampleRate_) {
+        return;
+    }
+    destroySynth();
+    sampleRate_ = sampleRate;
+    createSynth();
+}
+
+void GMSynthPlugin::createSynth() {
     settings_ = new_fluid_settings();
-    fluid_settings_setnum(settings_, "synth.sample-rate", kEngineSampleRate);
+    fluid_settings_setnum(settings_, "synth.sample-rate", sampleRate_);
     fluid_settings_setint(settings_, "synth.threadsafe-api", 0);  // only the audio thread drives it
     fluid_settings_setint(settings_, "synth.polyphony", 256);
     synth_ = new_fluid_synth(settings_);
@@ -74,16 +90,21 @@ GMSynthPlugin::GMSynthPlugin(Mode mode) : mode_(mode) {
         std::cerr << "GMSynthPlugin: no SoundFont loaded (looked for " << kSoundFontFile
                   << "; run scripts/setup_third_party.sh or set STRATAWRIGHT_SOUNDFONT)" << std::endl;
     }
+    appliedProgram_ = -1;
+    appliedVolume_ = -1.0f;
     applyProgramIfChanged();
 }
 
-GMSynthPlugin::~GMSynthPlugin() {
+void GMSynthPlugin::destroySynth() {
     if (synth_) {
         delete_fluid_synth(synth_);
+        synth_ = nullptr;
     }
     if (settings_) {
         delete_fluid_settings(settings_);
+        settings_ = nullptr;
     }
+    soundFontId_ = -1;
 }
 
 bool GMSynthPlugin::getInfo(PluginInfo& outInfo) const {

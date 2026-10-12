@@ -10,7 +10,7 @@
 
 namespace Layer3 {
 
-AUPluginImpl::AUPluginImpl(const char *path) {
+AUPluginImpl::AUPluginImpl(const char *path, double sampleRate) : m_sampleRate(sampleRate) {
 #ifdef __APPLE__
   AudioComponentDescription desc;
   std::memset(&desc, 0, sizeof(desc));
@@ -89,7 +89,7 @@ AUPluginImpl::AUPluginImpl(const char *path) {
     // 1. Set Stream Format (Assume 2-channel for now, will be updated by host if needed)
     AudioStreamBasicDescription asbd;
     std::memset(&asbd, 0, sizeof(asbd));
-    asbd.mSampleRate = 44100.0; // Default
+    asbd.mSampleRate = m_sampleRate;
     asbd.mFormatID = kAudioFormatLinearPCM;
     asbd.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved;
     asbd.mBitsPerChannel = 32;
@@ -223,7 +223,7 @@ bool AUPluginImpl::getInfo(PluginInfo &outInfo) const {
   Float64 latencySeconds = 0.0;
   UInt32 latencySize = sizeof(latencySeconds);
   if (AudioUnitGetProperty(auInstance, kAudioUnitProperty_Latency, kAudioUnitScope_Global, 0, &latencySeconds, &latencySize) == noErr) {
-      outInfo.latencySamples = static_cast<uint32_t>(latencySeconds * 44100.0);
+      outInfo.latencySamples = static_cast<uint32_t>(latencySeconds * m_sampleRate);
   }
 
   AudioComponent component = AudioComponentInstanceGetComponent(auInstance);

@@ -24,6 +24,9 @@ public:
     // Instantiation
     virtual std::unique_ptr<IPlugin> instantiatePlugin(const PluginDescriptor& descriptor) = 0;
 
+    // Sample rate new instances are created at: the engine's.
+    virtual void setSampleRate(double /*sampleRate*/) {}
+
     // Scan progress and status queries
     virtual bool isScanning() const = 0;
     virtual float getScanProgress() const = 0;

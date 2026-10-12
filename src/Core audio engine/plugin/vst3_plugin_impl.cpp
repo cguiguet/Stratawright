@@ -259,7 +259,7 @@ private:
 } // namespace Steinberg
 
 namespace Layer3 {
-VST3PluginImpl::VST3PluginImpl(const char *path) {
+VST3PluginImpl::VST3PluginImpl(const char *path, double sampleRate) : m_sampleRate(sampleRate) {
   m_hostContext = std::make_unique<HostContext>(this);
   m_inputEvents = new EventList();
   m_outputEvents = new EventList();
@@ -537,7 +537,7 @@ bool VST3PluginImpl::load(const char *path) {
   setup.processMode = Steinberg::Vst::kRealtime;
   setup.symbolicSampleSize = Steinberg::Vst::kSample32;
   setup.maxSamplesPerBlock = 512;
-  setup.sampleRate = 44100.0;
+  setup.sampleRate = m_sampleRate;
   
   m_processor->setupProcessing(setup);
   
@@ -546,7 +546,7 @@ bool VST3PluginImpl::load(const char *path) {
   m_processor->setProcessing(true);
   
   m_isInitialized = true;
-  m_currentSampleRate = 44100.0;
+  m_currentSampleRate = m_sampleRate;
   m_currentMaxBlockSize = 512;
  
   // Pre-allocate dynamic multi-bus buffers based on actual plugin layout

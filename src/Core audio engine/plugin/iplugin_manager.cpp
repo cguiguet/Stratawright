@@ -5,6 +5,7 @@
 #include "vst3_plugin_impl.h"
 #include "clap_plugin_impl.h"
 #include "au_plugin_impl.h"
+#include <atomic>
 #include <cstring>
 #include <iostream>
 #include <mutex>
@@ -104,21 +105,28 @@ public:
         return m_registry;
     }
 
+    void setSampleRate(double sampleRate) override {
+        if (sampleRate > 0.0) {
+            m_sampleRate = sampleRate;
+        }
+    }
+
     std::unique_ptr<IPlugin> instantiatePlugin(const PluginDescriptor& descriptor) override {
         // Phase 3: Plugin Instantiation (The Factory)
         if (descriptor.formatFlags & PluginFormatFlags::BUILTIN) {
             const bool drums = std::strcmp(descriptor.filePath, GMSynthPlugin::kDrumsPath) == 0;
-            return std::make_unique<GMSynthPlugin>(drums ? GMSynthPlugin::Mode::Drums : GMSynthPlugin::Mode::Melodic);
+            return std::make_unique<GMSynthPlugin>(drums ? GMSynthPlugin::Mode::Drums : GMSynthPlugin::Mode::Melodic,
+                                                   m_sampleRate.load());
         }
         if (descriptor.formatFlags & PluginFormatFlags::VST3) {
-            return std::make_unique<VST3PluginImpl>(descriptor.filePath);
+            return std::make_unique<VST3PluginImpl>(descriptor.filePath, m_sampleRate.load());
         }
         else if (descriptor.formatFlags & PluginFormatFlags::CLAP) {
             return std::make_unique<CLAPPluginImpl>(descriptor.filePath);
         }
 #if defined(__APPLE__)
         else if (descriptor.formatFlags & PluginFormatFlags::AU) {
-            return std::make_unique<AUPluginImpl>(descriptor.filePath);
+            return std::make_unique<AUPluginImpl>(descriptor.filePath, m_sampleRate.load());
         }
 #endif
         return nullptr;
@@ -151,6 +159,7 @@ private:
     std::unique_ptr<Layer2::IPluginScanner> m_scanner;
     std::vector<PluginDescriptor> m_registry;
     mutable std::mutex m_registryMutex;
+    std::atomic<double> m_sampleRate{44100.0};
 };
 
 std::unique_ptr<IPluginManager> IPluginManager::create() {

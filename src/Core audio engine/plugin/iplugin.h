@@ -57,6 +57,10 @@ public:
   using ParameterTweakedCallback = std::function<void(uint32_t paramIndex, float value)>;
   virtual void setParameterTweakedCallback(ParameterTweakedCallback cb) = 0;
 
+  // The engine's sample rate changed; called with the audio stream stopped. A plugin that renders
+  // at a fixed rate must follow it, or it plays out of tune.
+  virtual void setSampleRate(double /*sampleRate*/) {}
+
   // State management (e.g., chunks for VST)
   virtual std::vector<uint8_t> getState() const = 0;
   virtual bool loadState(const uint8_t *buffer, uint64_t bufferSize) = 0;

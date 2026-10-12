@@ -16,6 +16,8 @@
 #include <QScrollBar>
 #include <QTextBrowser>
 #include <QTextCursor>
+#include <QTextDocument>
+#include <QTextFrame>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -38,6 +40,45 @@ const char* const kPanelStyle = R"(
 
 QString escaped(const QString& text) {
     return text.toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>"));
+}
+
+const QColor kAccent(0xa7, 0x8b, 0xfa);
+const QColor kText(0xe8, 0xe8, 0xe8);
+const QColor kMuted(0x8a, 0x8a, 0x8a);
+const QColor kUserBubble(0x2e, 0x29, 0x45);
+const QColor kClaudeBubble(0x26, 0x26, 0x26);
+constexpr int kBubblePadding = 8;
+
+QTextCharFormat textFormat(const QColor& color) {
+    QTextCharFormat format;
+    format.setForeground(color);
+    return format;
+}
+
+QTextCharFormat noteFormat(const QColor& color) {
+    QFont font(QStringLiteral("Menlo"));
+    font.setPixelSize(11);
+    QTextCharFormat format;
+    format.setFont(font);
+    format.setForeground(color);
+    return format;
+}
+
+// Inserts a bubble at the end of the transcript, headed by its author, and returns it.
+QTextFrame* insertBubble(QTextDocument* document, const QString& author, const QColor& background, int leftMargin) {
+    QTextCursor cursor(document);
+    cursor.movePosition(QTextCursor::End);
+    QTextFrameFormat format;
+    format.setBackground(background);
+    format.setBorder(0);
+    format.setPadding(kBubblePadding);
+    format.setTopMargin(4);
+    format.setLeftMargin(leftMargin);
+    QTextFrame* frame = cursor.insertFrame(format);
+    QTextCharFormat authorFormat = textFormat(kAccent);
+    authorFormat.setFontWeight(QFont::Bold);
+    cursor.insertText(author, authorFormat);
+    return frame;
 }
 
 } // namespace
@@ -94,6 +135,7 @@ ChatPanel::ChatPanel(QWidget* parent) : QWidget(parent) {
     connect(newButton, &QPushButton::clicked, this, [this]() {
         session_->newConversation();
         transcript_->clear();
+        replyFrame_ = nullptr;
         conversation_.sessionId.clear();
         sessionCostUsd_ = 0.0;
         statusLabel_->setText(QStringLiteral("New conversation"));
@@ -168,11 +210,18 @@ void ChatPanel::switchTo(const Conversation& conversation) {
     }
     conversation_ = conversation;
     session_->setConversation(conversation.sessionId);
+    replyFrame_ = nullptr;
     if (conversation.transcriptHtml.isEmpty()) {
         transcript_->clear();
     } else {
         transcript_->setHtml(conversation.transcriptHtml);
-        transcript_->verticalScrollBar()->setValue(transcript_->verticalScrollBar()->maximum());
+        // Saved bubbles come back without their padding.
+        for (QTextFrame* bubble : transcript_->document()->rootFrame()->childFrames()) {
+            QTextFrameFormat format = bubble->frameFormat();
+            format.setPadding(kBubblePadding);
+            bubble->setFrameFormat(format);
+        }
+        scrollToBottom();
     }
     sessionCostUsd_ = 0.0;
     updateProjectLabel();
@@ -242,8 +291,8 @@ void ChatPanel::sendInput() {
         return;
     }
     input_->clear();
-    appendHtml(QStringLiteral("<p style=\"color:#a78bfa; margin-top:10px;\"><b>You</b><br><span style=\"color:#e8e8e8;\">%1</span></p>")
-                   .arg(escaped(text)));
+    appendUserMessage(text);
+    startReply();
     session_->send(text);
 }
 
@@ -253,20 +302,32 @@ void ChatPanel::onStreamEvent(const StreamEvent& event) {
         model_ = event.model;
         statusLabel_->setText(QStringLiteral("Claude Code · %1").arg(model_));
         break;
-    case StreamEvent::Kind::AssistantText:
-        appendMarkdown(event.text);
+    case StreamEvent::Kind::AssistantText: {
+        QTextCursor cursor = replyCursor();
+        cursor.insertBlock(QTextBlockFormat(), textFormat(kText));
+        cursor.insertMarkdown(event.text);
+        scrollToBottom();
+        scheduleSave();
         break;
-    case StreamEvent::Kind::ToolUse:
-        appendHtml(QStringLiteral("<p style=\"color:#8a8a8a; font-family:Menlo,monospace; font-size:11px; margin:2px 0;\">⚙ %1 · %2</p>")
-                       .arg(escaped(event.toolName), escaped(event.text)));
+    }
+    case StreamEvent::Kind::ToolUse: {
+        QTextCursor cursor = replyCursor();
+        cursor.insertBlock(QTextBlockFormat(), noteFormat(kMuted));
+        cursor.insertText(QStringLiteral("⚙ %1 · %2").arg(event.toolName, event.text));
+        scrollToBottom();
+        scheduleSave();
         break;
+    }
     case StreamEvent::Kind::ToolResult:
         if (event.isError) {
-            appendHtml(QStringLiteral("<p style=\"color:#f87171; font-family:Menlo,monospace; font-size:11px; margin:2px 0;\">✗ %1</p>")
-                           .arg(escaped(event.text)));
+            QTextCursor cursor = replyCursor();
+            cursor.insertBlock(QTextBlockFormat(), noteFormat(QColor(0xf8, 0x71, 0x71)));
+            cursor.insertText(QStringLiteral("✗ %1").arg(event.text));
+            scheduleSave();
         }
         break;
     case StreamEvent::Kind::TurnFinished:
+        finishReply();
         sessionCostUsd_ += event.costUsd;
         statusLabel_->setText(QStringLiteral("Claude Code · %1 · $%2 this session")
                                   .arg(model_)
@@ -283,6 +344,8 @@ void ChatPanel::onBusyChanged(bool busy) {
     stopButton_->setEnabled(busy);
     if (busy) {
         statusLabel_->setText(QStringLiteral("Claude is working…"));
+    } else {
+        finishReply();
     }
 }
 
@@ -295,17 +358,63 @@ void ChatPanel::appendHtml(const QString& html) {
     cursor.movePosition(QTextCursor::End);
     cursor.insertBlock();
     cursor.insertHtml(html);
-    transcript_->verticalScrollBar()->setValue(transcript_->verticalScrollBar()->maximum());
+    scrollToBottom();
     scheduleSave();
 }
 
-void ChatPanel::appendMarkdown(const QString& markdown) {
-    QTextCursor cursor(transcript_->document());
-    cursor.movePosition(QTextCursor::End);
-    cursor.insertBlock();
-    cursor.insertMarkdown(markdown);
-    transcript_->verticalScrollBar()->setValue(transcript_->verticalScrollBar()->maximum());
+void ChatPanel::scrollToBottom() {
+    // After the next layout pass: the scroll range does not include text just inserted yet.
+    QTimer::singleShot(0, transcript_, [this]() {
+        transcript_->verticalScrollBar()->setValue(transcript_->verticalScrollBar()->maximum());
+    });
+}
+
+void ChatPanel::appendUserMessage(const QString& text) {
+    QTextFrame* bubble = insertBubble(transcript_->document(), QStringLiteral("You"), kUserBubble, 24);
+    QTextCursor cursor = bubble->lastCursorPosition();
+    cursor.insertBlock(QTextBlockFormat(), textFormat(kText));
+    cursor.insertText(text);
+    scrollToBottom();
     scheduleSave();
+}
+
+void ChatPanel::startReply() {
+    replyFrame_ = insertBubble(transcript_->document(), QStringLiteral("Claude"), kClaudeBubble, 0);
+    QTextCursor cursor = replyFrame_->lastCursorPosition();
+    QTextCharFormat placeholder = textFormat(kMuted);
+    placeholder.setFontItalic(true);
+    cursor.insertBlock(QTextBlockFormat(), placeholder);
+    cursor.insertText(QStringLiteral("working…"));
+    replyPlaceholder_ = true;
+    scrollToBottom();
+}
+
+QTextCursor ChatPanel::replyCursor() {
+    if (!replyFrame_) {
+        startReply();  // output without a message from here (e.g. a resumed turn)
+    }
+    QTextCursor cursor = replyFrame_->lastCursorPosition();
+    if (replyPlaceholder_) {
+        // Drop the placeholder line: the output takes its place.
+        cursor.movePosition(QTextCursor::StartOfBlock, QTextCursor::KeepAnchor);
+        cursor.movePosition(QTextCursor::PreviousCharacter, QTextCursor::KeepAnchor);
+        cursor.removeSelectedText();
+        replyPlaceholder_ = false;
+    }
+    return cursor;
+}
+
+void ChatPanel::finishReply() {
+    if (replyFrame_ && replyPlaceholder_) {
+        QTextCursor cursor = replyFrame_->lastCursorPosition();
+        cursor.movePosition(QTextCursor::StartOfBlock, QTextCursor::KeepAnchor);
+        QTextCharFormat note = textFormat(kMuted);
+        note.setFontItalic(true);
+        cursor.insertText(QStringLiteral("(no answer)"), note);
+        replyPlaceholder_ = false;
+        scheduleSave();
+    }
+    replyFrame_ = nullptr;
 }
 
 } // namespace presentation::chat

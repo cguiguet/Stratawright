@@ -8,6 +8,8 @@
 class QLabel;
 class QTimer;
 class QPlainTextEdit;
+class QTextCursor;
+class QTextFrame;
 class QPushButton;
 class QTextBrowser;
 
@@ -49,7 +51,13 @@ private:
     void onStreamEvent(const StreamEvent& event);
     void onBusyChanged(bool busy);
     void appendHtml(const QString& html);
-    void appendMarkdown(const QString& markdown);
+    // Each message is a bubble: the user's, then one for Claude's whole answer (its text and the
+    // tools it ran), shown as soon as the message is sent with a placeholder until output arrives.
+    void appendUserMessage(const QString& text);
+    void startReply();
+    QTextCursor replyCursor();
+    void finishReply();
+    void scrollToBottom();
     void checkProject();
     void switchTo(const Conversation& conversation);
     void scheduleSave();
@@ -70,6 +78,8 @@ private:
     const void* watchedSession_ = nullptr;
     QTimer* projectWatch_ = nullptr;
     QTimer* saveTimer_ = nullptr;
+    QTextFrame* replyFrame_ = nullptr;   // Claude's bubble for the current message
+    bool replyPlaceholder_ = false;      // it still only shows the "working" placeholder
     QString model_;
     double sessionCostUsd_ = 0.0;
 };

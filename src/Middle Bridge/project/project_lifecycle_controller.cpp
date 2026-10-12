@@ -85,7 +85,7 @@ bool ProjectLifecycleController::createNewProject(const ProjectMetadataState& me
     composition::ProjectMetadata meta;
     meta.projectName = metadata.projectName;
     meta.author = metadata.author;
-    meta.sampleRate = metadata.sampleRate;
+    meta.sampleRate = engineSampleRate_ != 0 ? engineSampleRate_ : metadata.sampleRate;
     meta.initialTempoBPM = metadata.initialTempoBPM;
     meta.timeSignatureNumerator = metadata.timeSignatureNumerator;
     meta.timeSignatureDenominator = metadata.timeSignatureDenominator;
@@ -154,6 +154,10 @@ bool ProjectLifecycleController::loadProject(const char* absoluteFilePath) {
         isPending_.store(false);
         return false;
     }
+    // A project saved at another rate: convert its positions (stored in samples) to the engine's.
+    if (engineSampleRate_ != 0) {
+        newSession->convertSampleRate(engineSampleRate_);
+    }
     progress_.store(0.8f);
 
     // 6. Set as the active session
@@ -209,6 +213,11 @@ bool ProjectLifecycleController::restoreProject(const char* snapshotFilePath, co
     return true;
 }
 
+void ProjectLifecycleController::setEngineSampleRate(uint32_t sampleRate) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    engineSampleRate_ = sampleRate;
+}
+
 bool ProjectLifecycleController::exportProjectToJson(const char* absoluteFilePath) {
     if (!absoluteFilePath || std::strlen(absoluteFilePath) == 0) return false;
 
@@ -258,6 +267,9 @@ bool ProjectLifecycleController::importProjectFromJson(const char* absoluteFileP
         resumeAudioStream();
         isPending_.store(false);
         return false;
+    }
+    if (engineSampleRate_ != 0) {
+        newSession->convertSampleRate(engineSampleRate_);
     }
     progress_.store(0.8f);
 

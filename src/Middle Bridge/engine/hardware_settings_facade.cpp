@@ -76,21 +76,8 @@ bool HardwareSettingsFacade::applyConfig(const HardwareConfig& config) {
         audioDriver_->closeStream();
     }
 
-    // 3. Prepare the audio engine for new parameters
-    audioEngine_->prepare(config.sampleRate, config.bufferSize);
-
-    // 3b. Propagate new sample rate across active session and track manager
-    if (sessionManager_ && sessionManager_->getActiveSession()) {
-        auto* session = sessionManager_->getActiveSession();
-        auto metadata = session->getMetadata();
-        metadata.sampleRate = config.sampleRate;
-        session->setMetadata(metadata);
-        if (auto* trackManager = session->getTrackManager()) {
-            trackManager->setProjectSampleRate(config.sampleRate);
-        }
-    }
-
-    // 4. Open audio stream with new configuration
+    // 3. Open audio stream with new configuration (not started yet). If the device refuses it,
+    //    nothing else has changed: the engine and the project keep their rate.
     Layer1::IAudioDriver::StreamConfig driverConfig = {};
     driverConfig.inputDeviceIndex = config.inputDeviceIndex;
     driverConfig.outputDeviceIndex = config.outputDeviceIndex;
@@ -103,6 +90,22 @@ bool HardwareSettingsFacade::applyConfig(const HardwareConfig& config) {
     auto result = audioDriver_->openStream(driverConfig);
     if (!result.success) {
         return false;
+    }
+    const Layer1::IAudioDriver::StreamConfig opened = audioDriver_->getStreamConfig();
+    const uint32_t newRate = opened.sampleRate != 0 ? opened.sampleRate : config.sampleRate;
+    const uint32_t bufferSize = opened.bufferSize != 0 ? opened.bufferSize : config.bufferSize;
+
+    // 4. Prepare the audio engine for the new parameters. A new rate also moves the project:
+    //    its positions are in samples, so they are converted to stay at the same musical time.
+    const auto oldRate = static_cast<uint32_t>(audioEngine_->getSampleRate());
+    audioEngine_->prepare(newRate, bufferSize);
+    if (oldRate != newRate) {
+        if (sessionManager_ && sessionManager_->getActiveSession()) {
+            sessionManager_->getActiveSession()->convertSampleRate(newRate);
+        }
+        if (sampleRateChanged_) {
+            sampleRateChanged_(oldRate, newRate);
+        }
     }
 
     // 5. Start audio stream processing

@@ -76,6 +76,12 @@ public:
      * @brief Exports the project to a JSON file.
      */
     virtual bool exportProjectToJson(const char* absoluteFilePath) = 0;
+
+    /**
+     * @brief The rate the audio engine runs at. Projects opened afterwards are converted to it
+     * (their positions are stored in samples), and new projects start at it.
+     */
+    virtual void setEngineSampleRate(uint32_t /*sampleRate*/) {}
     
     /**
      * @brief Imports a project from a JSON file.

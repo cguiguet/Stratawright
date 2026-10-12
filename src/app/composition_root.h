@@ -174,6 +174,13 @@ private:
     bool connectDSPToComposition();
     bool connectMediaToPresentation();
 
+    // Everything outside the project that counts in samples (tempo map, playhead, clocks, new
+    // plugins, recording latency, project loading) follows the engine to a new rate. The project
+    // itself must already have been converted.
+    void onEngineSampleRateChanged(uint32_t oldRate, uint32_t newRate);
+    // Round-trip latency of the open stream's devices, compensated when recording.
+    void updateRecordingLatency();
+
     // --- Concrete Layer Instances (Phase 1) ---
     // Layer 1
     std::unique_ptr<Layer1::IAudioDriver> audioDriver_;

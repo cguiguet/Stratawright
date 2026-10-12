@@ -80,8 +80,9 @@ public:
     // which owns their undo history: records no undo step of its own.
     virtual void syncTempoMetadata(double /*bpm*/, uint8_t /*numerator*/, uint8_t /*denominator*/) {}
     // Moves the project to another sample rate: every position stored in samples is converted so
-    // that it stays at the same musical time, and the new rate is recorded. Not undoable: the undo
-    // history (positions at the old rate) is cleared.
+    // that it stays at the same musical time, its plugins are moved to the new rate, and the rate is
+    // recorded. Call with the audio stream stopped. Not undoable: the undo steps (positions at the
+    // old rate) are dropped.
     virtual void convertSampleRate(uint32_t /*newSampleRate*/) {}
 
     virtual MixStatistics getMixStatistics() const = 0;

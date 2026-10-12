@@ -5,6 +5,7 @@
 #include "Hardware/OS abstraction/audio/iaudio_driver.h"
 #include "Hardware/OS abstraction/midi/imidi_driver.h"
 #include "Core audio engine/engine/iaudio_engine.h"
+#include <functional>
 #include <mutex>
 #include <unordered_set>
 
@@ -29,6 +30,12 @@ public:
     double getLatencyMs() override;
     uint32_t getXrunCount() override;
 
+    // Called when applyConfig changes the engine's sample rate, with the stream open but not yet
+    // started, after the active project has been converted: for everything else that counts in
+    // samples (tempo map, playhead, clocks, new plugins).
+    using SampleRateChangedHandler = std::function<void(uint32_t oldRate, uint32_t newRate)>;
+    void setSampleRateChangedHandler(SampleRateChangedHandler handler) { sampleRateChanged_ = std::move(handler); }
+
     std::vector<MidiPortDescriptor> getAvailableMidiPorts() override;
     bool isMidiPortOpen(uint32_t portIndex) override;
     bool setMidiPortOpen(uint32_t portIndex, bool open) override;
@@ -40,6 +47,7 @@ private:
     ISessionManager* sessionManager_ = nullptr;
     std::mutex mutex_;
     std::unordered_set<uint32_t> openMidiPorts_;
+    SampleRateChangedHandler sampleRateChanged_;
 };
 
 } // namespace bridge

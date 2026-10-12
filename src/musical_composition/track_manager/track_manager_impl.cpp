@@ -1163,6 +1163,23 @@ void TrackManagerImpl::convertSampleRate(const SampleRateConversion& convert) {
     compileTimelineSnapshot();
 }
 
+void TrackManagerImpl::setPluginSampleRate(double sampleRate) {
+    const auto apply = [sampleRate](void* instance) {
+        if (instance) {
+            static_cast<Layer3::IPlugin*>(instance)->setSampleRate(sampleRate);
+        }
+    };
+    for (auto& [trackIdVal, state] : tracks_) {
+        apply(state.instrument.pluginInstance);
+        for (const auto& plugin : state.plugins) {
+            apply(plugin.pluginInstance);
+        }
+    }
+    for (const auto& plugin : masterPlugins_) {
+        apply(plugin.pluginInstance);
+    }
+}
+
 void TrackManagerImpl::compileTimelineSnapshot() {
     if (!kernel_) return;
 

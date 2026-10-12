@@ -5,6 +5,8 @@
 #include "Hardware/OS abstraction/audio/iaudio_driver.h"
 #include "Core audio engine/engine/iaudio_engine.h"
 #include <memory>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -17,6 +19,7 @@ public:
     uint32_t closeCalls = 0;
     uint32_t openCalls = 0;
     uint32_t startCalls = 0;
+    bool failOpen = false;  // the device refuses the settings
 
     MockAudioDriver() {
         activeConfig.inputDeviceIndex = Layer1::UNUSED_DEVICE_INDEX;
@@ -30,6 +33,9 @@ public:
 
     Layer1::OpenResult openStream(const Layer1::IAudioDriver::StreamConfig& config) override {
         openCalls++;
+        if (failOpen) {
+            return Layer1::OpenResult{.success = false};
+        }
         activeConfig = config;
         state = Layer1::StreamState::OPEN;
         return Layer1::OpenResult{.success = true};
@@ -269,4 +275,37 @@ TEST_CASE("HardwareSettingsFacade: Metrics & Latency Queries", "[MiddleBridge][H
 
     // Latency = roundtrip = 2 * (bufferSize / sampleRate) * 1000 = 2 * (256 / 48000) * 1000 ≈ 10.666 ms
     CHECK(facade.getLatencyMs() == Catch::Approx(10.6667).margin(0.001));
+}
+
+TEST_CASE("HardwareSettingsFacade: a new sample rate moves what counts in samples", "[MiddleBridge][Hardware]") {
+    MockAudioDriver driver;
+    MockMidiDriver midiDriver;
+    MockAudioEngine engine;
+    bridge::HardwareSettingsFacade facade(&driver, &midiDriver, &engine);
+    std::vector<std::pair<uint32_t, uint32_t>> changes;
+    facade.setSampleRateChangedHandler([&](uint32_t oldRate, uint32_t newRate) { changes.emplace_back(oldRate, newRate); });
+
+    bridge::HardwareConfig config{};
+    config.inputDeviceIndex = Layer1::UNUSED_DEVICE_INDEX;
+    config.outputDeviceIndex = 1;
+    config.numOutputChannels = 2;
+    config.sampleRate = 44100;
+    config.bufferSize = 512;
+    engine.preparedSampleRate = 44100.0;  // the engine already runs at 44.1 kHz
+
+    REQUIRE(facade.applyConfig(config));
+    CHECK(changes.empty());  // same rate: nothing to move
+
+    config.sampleRate = 48000;
+    REQUIRE(facade.applyConfig(config));
+    REQUIRE(changes.size() == 1);
+    CHECK(changes[0] == std::make_pair(44100u, 48000u));
+    CHECK(engine.preparedSampleRate == 48000.0);
+
+    // A device that refuses the settings leaves the engine, and so the project, at their rate.
+    driver.failOpen = true;
+    config.sampleRate = 96000;
+    CHECK_FALSE(facade.applyConfig(config));
+    CHECK(changes.size() == 1);
+    CHECK(engine.preparedSampleRate == 48000.0);
 }

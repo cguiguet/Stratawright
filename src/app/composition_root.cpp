@@ -59,6 +59,7 @@
 #include "Middle Bridge/automation/iautomation_recording_gateway.h"
 #include "Middle Bridge/analysis/analysis_controller.h"
 #include "musical_composition/recording/take_recording_intake.h"
+#include "musical_composition/sample_rate_conversion.h"
 #include "recording/recording_controller.h"
 #include "Media management/recording/disk_writer_service_impl.h"
 #include "Media management/intake/imedia_intake_pipeline.h"
@@ -66,6 +67,8 @@
 #include "core_audio_latency.h"
 #endif
 #include <algorithm>
+#include <limits>
+#include <vector>
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
@@ -444,12 +447,16 @@ bool CompositionRoot::wireLayer6ToLayer7() {
     );
 
     // 3b. Instantiate Hardware Settings Facade
-    hardwareSettingsFacade_ = std::make_unique<bridge::HardwareSettingsFacade>(
+    auto hardwareSettingsFacade = std::make_unique<bridge::HardwareSettingsFacade>(
         audioDriver_.get(),
         midiDriver_.get(),
         audioEngine_.get(),
         sessionManager_.get()
     );
+    hardwareSettingsFacade->setSampleRateChangedHandler([this](uint32_t oldRate, uint32_t newRate) {
+        onEngineSampleRateChanged(oldRate, newRate);
+    });
+    hardwareSettingsFacade_ = std::move(hardwareSettingsFacade);
 
     // 4. Instantiate Middle Bridge Controllers with concrete dependencies
     trackController_ = std::make_unique<bridge::TrackController>(
@@ -634,7 +641,11 @@ bool CompositionRoot::connectAudioToBridges() {
     }
 
     // 1. Prepare Audio Engine for hardware callbacks
-    audioEngine_->prepare(44100.0, 512);
+    constexpr uint32_t kPreferredSampleRate = 44100;
+    audioEngine_->prepare(kPreferredSampleRate, 512);
+    if (projectLifecycleController_) {
+        projectLifecycleController_->setEngineSampleRate(kPreferredSampleRate);
+    }
 
     // 2. Pick the devices instead of blindly opening index 0 (on a MacBook that is the
     //    1-channel built-in mic, so a 2-channel open fails and the DAW runs with no stream).
@@ -646,13 +657,13 @@ bool CompositionRoot::connectAudioToBridges() {
     //    the built-in mic), ties going to the default input.
     //    Devices that cannot run at the engine's rate are skipped: a Bluetooth headset microphone
     //    only runs at 16 kHz, and opening it made the whole stream fail.
-    constexpr uint32_t kEngineSampleRate = 44100;
+    constexpr uint32_t engineSampleRate = kPreferredSampleRate;
     const auto runsAtEngineRate = [](const Layer1::DeviceInfo& info) {
         if (info.numSampleRates == 0) {
             return true;  // rates unknown: let the open decide
         }
         for (uint32_t r = 0; r < info.numSampleRates; ++r) {
-            if (info.supportedSampleRates[r] == kEngineSampleRate) {
+            if (info.supportedSampleRates[r] == engineSampleRate) {
                 return true;
             }
         }
@@ -693,7 +704,7 @@ bool CompositionRoot::connectAudioToBridges() {
         }
     }
     if (outputIndex == Layer1::UNUSED_DEVICE_INDEX) {
-        std::cerr << "CompositionRoot: Warning - the system default output cannot run at " << kEngineSampleRate
+        std::cerr << "CompositionRoot: Warning - the system default output cannot run at " << engineSampleRate
                   << " Hz right now (e.g. Bluetooth headphones at 48 kHz); audio stays off rather than playing on another device."
                   << std::endl;
         return true;
@@ -710,7 +721,7 @@ bool CompositionRoot::connectAudioToBridges() {
     config.outputDeviceIndex = outputIndex;
     config.numInputChannels = inputChannels;
     config.numOutputChannels = 2;
-    config.sampleRate = kEngineSampleRate;
+    config.sampleRate = engineSampleRate;
     config.bufferSize = 512;
     config.client = audioEngine_.get();
 
@@ -721,26 +732,84 @@ bool CompositionRoot::connectAudioToBridges() {
         // Don't fail the entire startup sequence - let GUI boot up
     } else {
         std::cout << "CompositionRoot: Audio hardware stream opened successfully. Starting playback thread..." << std::endl;
+        updateRecordingLatency();
         if (!audioDriver_->startStream()) {
             std::cerr << "CompositionRoot: Failed to start audio hardware stream callback" << std::endl;
         }
-#ifdef __APPLE__
-        uint64_t roundTripFrames = 0;
-        if (inputIndex != Layer1::UNUSED_DEVICE_INDEX) {
-            roundTripFrames += coreAudioLatencyFrames(audioDriver_->getDeviceInfo(inputIndex).name, true);
-        }
-        if (outputIndex != Layer1::UNUSED_DEVICE_INDEX) {
-            roundTripFrames += coreAudioLatencyFrames(audioDriver_->getDeviceInfo(outputIndex).name, false);
-        }
-        if (recordingController_) {
-            recordingController_->setHardwareLatencySamples(roundTripFrames);
-        }
-        std::cout << "CompositionRoot: Recording latency compensation: " << roundTripFrames << " frames ("
-                  << (static_cast<double>(roundTripFrames) * 1000.0 / static_cast<double>(config.sampleRate)) << " ms)" << std::endl;
-#endif
     }
 
     return true;
+}
+
+void CompositionRoot::onEngineSampleRateChanged(uint32_t oldRate, uint32_t newRate) {
+    std::cout << "CompositionRoot: Engine sample rate " << oldRate << " -> " << newRate << " Hz" << std::endl;
+    const composition::SampleRateConversion convert{oldRate, newRate};
+
+    if (tempoService_) {
+        // Tempo and meter changes after the start are placed in samples.
+        constexpr uint32_t kMaxEvents = 256;
+        std::vector<Layer2::ITempoService::TempoPoint> tempos(kMaxEvents);
+        std::vector<Layer2::ITempoService::MeterPoint> meters(kMaxEvents);
+        const uint32_t tempoCount = tempoService_->getTempoRange(0, std::numeric_limits<uint64_t>::max(), tempos.data(), kMaxEvents);
+        const uint32_t meterCount = tempoService_->getMeterRange(0, std::numeric_limits<uint64_t>::max(), meters.data(), kMaxEvents);
+        const auto placedLater = [](const auto& event) { return event.positionSample > 0; };
+        if (convert.changesAnything() && std::any_of(tempos.begin(), tempos.begin() + tempoCount, placedLater)) {
+            tempoService_->clearTempoMap();
+            for (uint32_t i = 0; i < tempoCount; ++i) {
+                tempoService_->setTempoAtPosition(tempos[i].bpm, convert(tempos[i].positionSample));
+            }
+        }
+        if (convert.changesAnything() && std::any_of(meters.begin(), meters.begin() + meterCount, placedLater)) {
+            tempoService_->clearMeterMap();
+            for (uint32_t i = 0; i < meterCount; ++i) {
+                tempoService_->setMeterAtPosition(meters[i].numerator, meters[i].denominator, convert(meters[i].positionSample));
+            }
+        }
+        tempoService_->setSampleRate(newRate);
+    }
+    if (clockService_) {
+        clockService_->setSampleRate(newRate);
+    }
+    if (automationMonitor_) {
+        automationMonitor_->setSampleRate(newRate);
+    }
+    if (pluginManager_) {
+        pluginManager_->setSampleRate(newRate);
+    }
+    if (projectLifecycleController_) {
+        projectLifecycleController_->setEngineSampleRate(newRate);
+    }
+    if (transport_ && convert.changesAnything()) {
+        const LoopState loop = transport_->getLoopState();
+        transport_->setLoopRange(convert(loop.startSample), convert(loop.endSample));
+        transport_->seek(convert(transport_->getPosition()), Layer3::ITransport::SeekMode::IMMEDIATE);
+    }
+    updateRecordingLatency();
+    if (sessionManager_) {
+        sessionManager_->triggerSessionRefresh();
+    }
+}
+
+void CompositionRoot::updateRecordingLatency() {
+#ifdef __APPLE__
+    if (!audioDriver_ || audioDriver_->getState() == Layer1::StreamState::IDLE) {
+        return;
+    }
+    const Layer1::IAudioDriver::StreamConfig stream = audioDriver_->getStreamConfig();
+    uint64_t roundTripFrames = 0;
+    if (stream.inputDeviceIndex != Layer1::UNUSED_DEVICE_INDEX && stream.numInputChannels > 0) {
+        roundTripFrames += coreAudioLatencyFrames(audioDriver_->getDeviceInfo(stream.inputDeviceIndex).name, true);
+    }
+    if (stream.outputDeviceIndex != Layer1::UNUSED_DEVICE_INDEX) {
+        roundTripFrames += coreAudioLatencyFrames(audioDriver_->getDeviceInfo(stream.outputDeviceIndex).name, false);
+    }
+    if (recordingController_) {
+        recordingController_->setHardwareLatencySamples(roundTripFrames);
+    }
+    const double rate = stream.sampleRate != 0 ? static_cast<double>(stream.sampleRate) : 44100.0;
+    std::cout << "CompositionRoot: Recording latency compensation: " << roundTripFrames << " frames ("
+              << (static_cast<double>(roundTripFrames) * 1000.0 / rate) << " ms)" << std::endl;
+#endif
 }
 
 bool CompositionRoot::connectTransportToScheduler() {

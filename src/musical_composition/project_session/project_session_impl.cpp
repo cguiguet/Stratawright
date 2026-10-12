@@ -283,6 +283,7 @@ public:
         }
         metadata_.sampleRate = newSampleRate;
         trackManager_->setProjectSampleRate(newSampleRate);
+        static_cast<TrackManagerImpl*>(trackManager_.get())->setPluginSampleRate(newSampleRate);
     }
 
     MixStatistics getMixStatistics() const override { return mixStats_; }

@@ -132,6 +132,9 @@ public:
     // Converts every track's timeline (regions, MIDI, automation; all arrangements) to another
     // sample rate, which becomes the project rate, and republishes it to the audio thread.
     void convertSampleRate(const SampleRateConversion& convert);
+    // Moves every plugin instance (instruments, inserts, master inserts) to the engine's new rate.
+    // Call with the audio stream stopped.
+    void setPluginSampleRate(double sampleRate);
     void recalculateTimeCaches(Layer2::ITempoService* tempoService) override;
 
     // IMidiClipDataProvider Overrides

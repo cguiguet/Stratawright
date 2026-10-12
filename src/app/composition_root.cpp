@@ -638,7 +638,8 @@ bool CompositionRoot::connectAudioToBridges() {
 
     // 2. Pick the devices instead of blindly opening index 0 (on a MacBook that is the
     //    1-channel built-in mic, so a 2-channel open fails and the DAW runs with no stream).
-    //    Output follows the system default output. If that device can also record (an audio
+    //    Output is only ever the system default output: never fall back to another device (it once
+    //    picked the monitor's speakers while Bluetooth headphones were the default). If that device can also record (an audio
     //    interface or an aggregate device), it is used for input too: one device means one clock,
     //    whereas two devices drift apart and RtAudio drops or repeats buffers (clicks in takes).
     //    Otherwise input is the device with the most input channels (a USB audio interface beats
@@ -678,8 +679,7 @@ bool CompositionRoot::connectAudioToBridges() {
         if (!runsAtEngineRate(info)) {
             continue;
         }
-        if (info.maxOutputChannels >= 2
-            && (outputIndex == Layer1::UNUSED_DEVICE_INDEX || info.isDefaultOutput)) {
+        if (info.isDefaultOutput && info.maxOutputChannels >= 2) {
             outputIndex = i;
         }
         const bool moreInputs = info.maxInputChannels > bestInputChannels;
@@ -692,9 +692,13 @@ bool CompositionRoot::connectAudioToBridges() {
             inputChannels = std::min(2U, info.maxInputChannels);
         }
     }
-    if (outputIndex != Layer1::UNUSED_DEVICE_INDEX) {
-        std::cout << "CompositionRoot: Audio output device: " << audioDriver_->getDeviceInfo(outputIndex).name << std::endl;
+    if (outputIndex == Layer1::UNUSED_DEVICE_INDEX) {
+        std::cerr << "CompositionRoot: Warning - the system default output cannot run at " << kEngineSampleRate
+                  << " Hz right now (e.g. Bluetooth headphones at 48 kHz); audio stays off rather than playing on another device."
+                  << std::endl;
+        return true;
     }
+    std::cout << "CompositionRoot: Audio output device: " << audioDriver_->getDeviceInfo(outputIndex).name << std::endl;
     if (inputIndex != Layer1::UNUSED_DEVICE_INDEX) {
         std::cout << "CompositionRoot: Audio input device: " << audioDriver_->getDeviceInfo(inputIndex).name
                   << " (" << inputChannels << " ch)" << std::endl;

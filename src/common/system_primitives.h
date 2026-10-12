@@ -586,7 +586,7 @@ static_assert(std::is_pod<LoopState>::value,
 
 //=== Plugin Host Primitives ===//
 
-enum class PluginFormat : uint8_t { NONE, VST3, AU, CLAP };
+enum class PluginFormat : uint8_t { NONE, VST3, AU, CLAP, BUILTIN };
 
 // Bit-flags for PluginDescriptor::formatFlags
 // Each plugin binary may support multiple formats simultaneously.
@@ -594,6 +594,7 @@ namespace PluginFormatFlags {
 constexpr uint16_t VST3 = 0x0001;
 constexpr uint16_t AU = 0x0002;
 constexpr uint16_t CLAP = 0x0004;
+constexpr uint16_t BUILTIN = 0x0008; // shipped with the app, no plugin binary
 } // namespace PluginFormatFlags
 
 struct PluginHandle {

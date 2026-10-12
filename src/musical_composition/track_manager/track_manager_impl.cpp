@@ -2319,6 +2319,7 @@ void TrackManagerImpl::insertTrackPluginInternal(TrackID id, uint32_t slotIndex,
                 if (plugDesc.formatFlags & PluginFormatFlags::VST3) format = PluginFormat::VST3;
                 else if (plugDesc.formatFlags & PluginFormatFlags::CLAP) format = PluginFormat::CLAP;
                 else if (plugDesc.formatFlags & PluginFormatFlags::AU) format = PluginFormat::AU;
+                else if (plugDesc.formatFlags & PluginFormatFlags::BUILTIN) format = PluginFormat::BUILTIN;
                 
                 pluginState->pluginHandle = { plugDesc.pluginId, 1, format };
                 std::strncpy(pluginState->name, plugDesc.name, sizeof(pluginState->name) - 1);
@@ -2584,6 +2585,7 @@ void TrackManagerImpl::insertTrackInstrumentInternal(TrackID id, uint32_t plugin
     if (plugDesc.formatFlags & PluginFormatFlags::VST3) format = PluginFormat::VST3;
     else if (plugDesc.formatFlags & PluginFormatFlags::AU) format = PluginFormat::AU;
     else if (plugDesc.formatFlags & PluginFormatFlags::CLAP) format = PluginFormat::CLAP;
+    else if (plugDesc.formatFlags & PluginFormatFlags::BUILTIN) format = PluginFormat::BUILTIN;
     slotNode->pluginHandle = { plugDesc.pluginId, 1, format };
     
     if (stateId != 0) {
@@ -2762,6 +2764,7 @@ void TrackManagerImpl::completeTrackInstrumentInsertion(TrackID trackId, void* r
         if (plugDesc.formatFlags & PluginFormatFlags::VST3) format = PluginFormat::VST3;
         else if (plugDesc.formatFlags & PluginFormatFlags::AU) format = PluginFormat::AU;
         else if (plugDesc.formatFlags & PluginFormatFlags::CLAP) format = PluginFormat::CLAP;
+        else if (plugDesc.formatFlags & PluginFormatFlags::BUILTIN) format = PluginFormat::BUILTIN;
         slotNode->pluginHandle = { plugDesc.pluginId, 1, format };
 
         std::atomic_thread_fence(std::memory_order_release);
@@ -2845,6 +2848,7 @@ void TrackManagerImpl::completeTrackPluginInsertion(TrackID trackId, uint32_t sl
                 if (plugDesc.formatFlags & PluginFormatFlags::VST3) format = PluginFormat::VST3;
                 else if (plugDesc.formatFlags & PluginFormatFlags::CLAP) format = PluginFormat::CLAP;
                 else if (plugDesc.formatFlags & PluginFormatFlags::AU) format = PluginFormat::AU;
+                else if (plugDesc.formatFlags & PluginFormatFlags::BUILTIN) format = PluginFormat::BUILTIN;
                 
                 pluginState->pluginHandle = { plugDesc.pluginId, 1, format };
                 std::strncpy(pluginState->name, plugDesc.name, sizeof(pluginState->name) - 1);

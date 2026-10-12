@@ -1,13 +1,41 @@
 #include "iplugin_manager.h"
+#include "gm_synth_plugin.h"
 #include "../../Core infrastructure/plugins/iplugin_scanner.h"
 #include "../../Hardware/OS abstraction/filesystem/ifile_system.h"
 #include "vst3_plugin_impl.h"
 #include "clap_plugin_impl.h"
 #include "au_plugin_impl.h"
+#include <cstring>
 #include <iostream>
 #include <mutex>
 
 namespace Layer3 {
+
+namespace {
+
+// DJB2 of the path, like scanned plugins, so built-in ids are stable across launches.
+uint32_t stablePluginId(const char* path) {
+    uint32_t hash = 5381;
+    for (const char* c = path; *c != '\0'; ++c) {
+        hash = ((hash << 5) + hash) + static_cast<uint8_t>(*c);
+    }
+    return hash;
+}
+
+PluginDescriptor builtinDescriptor(const char* name, const char* path) {
+    PluginDescriptor descriptor{};
+    descriptor.pluginId = stablePluginId(path);
+    std::strncpy(descriptor.name, name, sizeof(descriptor.name) - 1);
+    std::strncpy(descriptor.manufacturer, "Stratawright", sizeof(descriptor.manufacturer) - 1);
+    std::strncpy(descriptor.filePath, path, sizeof(descriptor.filePath) - 1);
+    descriptor.version = 1u << 16;
+    descriptor.formatFlags = PluginFormatFlags::BUILTIN;
+    descriptor.capabilities = 0x01;  // instrument (the CLI checks this...)
+    descriptor.category = PluginCategory::INSTRUMENT;  // (...the GUI checks this)
+    return descriptor;
+}
+
+} // namespace
 
 class PluginManagerImpl : public IPluginManager {
 public:
@@ -22,6 +50,12 @@ public:
             std::lock_guard<std::mutex> lock(m_registryMutex);
             m_registry = m_scanner->getCachedDescriptors();
         }
+
+        // Built-in instruments are always available, whatever is installed. Scans only add or
+        // replace entries by id, so these survive rescans.
+        std::lock_guard<std::mutex> lock(m_registryMutex);
+        m_registry.push_back(builtinDescriptor("GM Synth", GMSynthPlugin::kSynthPath));
+        m_registry.push_back(builtinDescriptor("GM Drums", GMSynthPlugin::kDrumsPath));
     }
 
     ~PluginManagerImpl() override {
@@ -72,6 +106,10 @@ public:
 
     std::unique_ptr<IPlugin> instantiatePlugin(const PluginDescriptor& descriptor) override {
         // Phase 3: Plugin Instantiation (The Factory)
+        if (descriptor.formatFlags & PluginFormatFlags::BUILTIN) {
+            const bool drums = std::strcmp(descriptor.filePath, GMSynthPlugin::kDrumsPath) == 0;
+            return std::make_unique<GMSynthPlugin>(drums ? GMSynthPlugin::Mode::Drums : GMSynthPlugin::Mode::Melodic);
+        }
         if (descriptor.formatFlags & PluginFormatFlags::VST3) {
             return std::make_unique<VST3PluginImpl>(descriptor.filePath);
         }

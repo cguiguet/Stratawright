@@ -74,6 +74,7 @@ public:
     uint32_t getNodeCount() const override { return 0; }
     uint32_t getConnectionCount() const override { return 0; }
     bool hasCycles() const override { return false; }
+    bool waitForBlocksInFlight(uint32_t) override { return true; }
 };
 
 // Mock IFileSystem

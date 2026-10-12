@@ -296,7 +296,13 @@ public:
   uint32_t getConnectionCount() const override;
   bool hasCycles() const override;
 
+  bool waitForBlocksInFlight(uint32_t timeoutMs) override;
+
 private:
+  // Blocks started and finished by process(), for waitForBlocksInFlight.
+  std::atomic<uint64_t> blocksStarted_{0};
+  std::atomic<uint64_t> blocksFinished_{0};
+
   //==========================================================================
   // Internal State
   //==========================================================================

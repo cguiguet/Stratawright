@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "Core audio engine/scheduler/scheduler_impl.h"
 #include "Core infrastructure/bridges/imutation_bridge.h"
+#include <atomic>
 #include <thread>
 #include <chrono>
 #include <vector>
@@ -69,3 +70,66 @@ TEST_CASE("Scheduler: Multithreading Handoff", "[Layer3][Scheduler][MT]") {
     }
 }
 
+
+namespace {
+std::atomic<bool> gBlockEntered{false};
+std::atomic<bool> gBlockReleased{false};
+std::atomic<bool> gBlockFinished{false};
+}
+
+TEST_CASE("Scheduler: waiting for the blocks in flight", "[Layer3][Scheduler][MT]") {
+    auto mutationBridge = Layer2::IMutationBridge::create(64);
+    auto kernel = IDSPKernel::create(16);
+    REQUIRE(kernel != nullptr);
+
+    // A node whose processing holds the block until the test releases it.
+    gBlockEntered = false;
+    gBlockReleased = true;
+    gBlockFinished = false;
+    kernel->registerProcessor(0, [](NodeID, float* const*, float* const*, uint32_t, uint32_t, const EventData*, uint32_t, EventData*, uint32_t*, const ProcessContext*, const bool*, bool*) {
+        gBlockEntered = true;
+        while (!gBlockReleased) {
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
+        }
+        gBlockFinished = true;
+    });
+    kernel->attachMutationBridge(mutationBridge.get());
+
+    SystemMutation mutation = {};
+    mutation.type = Layer2::MutationType::NODE_ADD;
+    mutation.node.id = {1, 1};
+    mutation.node.type = 0;
+    mutationBridge->pushMutation(mutation);
+    ProcessContext context = {};
+    for (int retry = 0; retry < 500 && !gBlockEntered; ++retry) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        kernel->process(nullptr, nullptr, 2, 64, &context);
+    }
+    REQUIRE(gBlockEntered);
+
+    // Nothing running: returns at once.
+    CHECK(kernel->waitForBlocksInFlight(0));
+
+    gBlockEntered = false;
+    gBlockReleased = false;
+    gBlockFinished = false;
+    std::thread audioThread([&] { kernel->process(nullptr, nullptr, 2, 64, &context); });
+    while (!gBlockEntered) {
+        std::this_thread::yield();
+    }
+
+    // The block is held: the wait times out.
+    CHECK_FALSE(kernel->waitForBlocksInFlight(20));
+    CHECK_FALSE(gBlockFinished);
+
+    // Released shortly: the wait returns only once the block has finished.
+    std::thread releaser([] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        gBlockReleased = true;
+    });
+    CHECK(kernel->waitForBlocksInFlight(2000));
+    CHECK(gBlockFinished);
+
+    releaser.join();
+    audioThread.join();
+}

@@ -12,6 +12,7 @@
 #include "common/dsp/factory_interface.h"
 #include "topological_sort.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -527,6 +528,13 @@ void DSPKernelImpl::process(float *const *inputs, float *const *outputs,
   (void)inputs;  // Reserved for future use (external audio input)
   (void)outputs; // Reserved for future use (main output mix)
 
+  // Counted so that other threads can wait for this block before freeing what they unpublished.
+  blocksStarted_.fetch_add(1, std::memory_order_seq_cst);
+  struct BlockFinished {
+    std::atomic<uint64_t> &counter;
+    ~BlockFinished() { counter.fetch_add(1, std::memory_order_release); }
+  } blockFinished{blocksFinished_};
+
   // 1. Check for new topology from worker thread (wait-free)
   DSPGraphTopology *newTopology = nullptr;
   if (workerToRTQueue.pop(newTopology)) {
@@ -835,6 +843,18 @@ uint32_t DSPKernelImpl::getConnectionCount() const {
 bool DSPKernelImpl::hasCycles() const {
   DSPGraphTopology *topology = activeTopology.load(std::memory_order_acquire);
   return topology ? topology->hasCycles.load(std::memory_order_relaxed) : false;
+}
+
+bool DSPKernelImpl::waitForBlocksInFlight(uint32_t timeoutMs) {
+  const uint64_t started = blocksStarted_.load(std::memory_order_seq_cst);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+  while (blocksFinished_.load(std::memory_order_acquire) < started) {
+    if (std::chrono::steady_clock::now() >= deadline) {
+      return false;
+    }
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
+  return true;
 }
 
 //==============================================================================

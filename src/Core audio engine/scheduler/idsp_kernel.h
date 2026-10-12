@@ -157,6 +157,17 @@ public:
   virtual bool hasCycles() const = 0;
 
   //==========================================================================
+  // Reclamation (Non-RT)
+  //==========================================================================
+
+  // Waits until every process() call that had started when this was called has returned, so that
+  // an object unpublished beforehand (e.g. a plugin instance swapped out of its slot) can be freed:
+  // no block can still be using it. Returns at once when no block is running, and false if the
+  // blocks did not finish within timeoutMs (the caller should then leak rather than free).
+  // Thread-safety: never call from process(); assumes process() is not run concurrently.
+  virtual bool waitForBlocksInFlight(uint32_t timeoutMs) = 0;
+
+  //==========================================================================
   // Factory
   //==========================================================================
 

@@ -76,6 +76,9 @@ public:
 
     virtual const ProjectMetadata& getMetadata() const = 0;
     virtual void setMetadata(const ProjectMetadata& meta) = 0;
+    // Keeps the tempo and time signature saved with the project in step with the tempo service,
+    // which owns their undo history: records no undo step of its own.
+    virtual void syncTempoMetadata(double /*bpm*/, uint8_t /*numerator*/, uint8_t /*denominator*/) {}
 
     virtual MixStatistics getMixStatistics() const = 0;
     virtual void setMixStatistics(const MixStatistics& stats) = 0;

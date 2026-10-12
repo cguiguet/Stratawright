@@ -247,6 +247,12 @@ public:
         }
     }
 
+    void syncTempoMetadata(double bpm, uint8_t numerator, uint8_t denominator) override {
+        metadata_.initialTempoBPM = static_cast<float>(bpm);
+        metadata_.timeSignatureNumerator = numerator;
+        metadata_.timeSignatureDenominator = denominator;
+    }
+
     MixStatistics getMixStatistics() const override { return mixStats_; }
     void setMixStatistics(const MixStatistics& stats) override { mixStats_ = stats; }
 

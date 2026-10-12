@@ -192,6 +192,7 @@ void TimelineController::setBPM(double bpm) {
     tempoService_->setTempoAtPosition(clampedBpm, 0);
     transport_->updateTempoCache();
     if (sessionManager_) sessionManager_->onTempoMapChanged(tempoService_);
+    syncTempoToSession();
 }
 
 bool TimelineController::isTempoAutomated() const {
@@ -238,6 +239,7 @@ void TimelineController::removeTempoPoint(uint64_t framePosition) {
     tempoService_->removeTempoEventAtPosition(framePosition);
     transport_->updateTempoCache();
     if (sessionManager_) sessionManager_->onTempoMapChanged(tempoService_);
+    syncTempoToSession();
 }
 
 void TimelineController::addTempoPoint(uint64_t framePosition, double bpm) {
@@ -280,6 +282,7 @@ void TimelineController::addTempoPoint(uint64_t framePosition, double bpm) {
     tempoService_->setTempoAtPosition(clampedBpm, framePosition);
     transport_->updateTempoCache();
     if (sessionManager_) sessionManager_->onTempoMapChanged(tempoService_);
+    syncTempoToSession();
 }
 
 uint32_t TimelineController::getTempoPoints(uint64_t startFrame, uint64_t endFrame,
@@ -337,6 +340,7 @@ void TimelineController::setTimeSignature(VisualTimeSignature timeSig) {
 
     tempoService_->setMeterAtPosition(num, den, pos);
     transport_->updateTempoCache();
+    syncTempoToSession();
 }
 
 void TimelineController::setLoopRange(uint64_t startFrame, uint64_t endFrame) {
@@ -632,6 +636,21 @@ void TimelineController::onSessionChanging() {
 }
 
 void TimelineController::onSessionChanged(composition::IProjectSession* newSession) {
+    if (newSession && tempoService_ && transport_) {
+        // The tempo service is shared by every session: load this one's tempo and time signature
+        // into it, otherwise a loaded project kept the previous tempo (120 after a relaunch).
+        const auto& meta = newSession->getMetadata();
+        if (meta.initialTempoBPM > 0.0f) {
+            tempoService_->clearTempoMap();
+            tempoService_->setTempoAtPosition(static_cast<double>(meta.initialTempoBPM), 0);
+        }
+        if (meta.timeSignatureNumerator > 0 && meta.timeSignatureDenominator > 0) {
+            tempoService_->clearMeterMap();
+            tempoService_->setMeterAtPosition(meta.timeSignatureNumerator, meta.timeSignatureDenominator, 0);
+        }
+        transport_->updateTempoCache();
+        if (sessionManager_) sessionManager_->onTempoMapChanged(tempoService_);
+    }
     if (newSession) {
         auto* history = newSession->getCommandHistory();
         if (history) {
@@ -641,6 +660,14 @@ void TimelineController::onSessionChanged(composition::IProjectSession* newSessi
             });
         }
     }
+}
+
+void TimelineController::syncTempoToSession() {
+    auto* session = sessionManager_ ? sessionManager_->getActiveSession() : nullptr;
+    if (!session || !tempoService_) return;
+    uint8_t numerator = 4, denominator = 4;
+    tempoService_->getMeterAtPosition(0, numerator, denominator);
+    session->syncTempoMetadata(tempoService_->getTempoAtPosition(0), numerator, denominator);
 }
 
 void TimelineController::applyTempoTimelineDelta(const composition::ProjectDelta& delta, bool isUndo) {
@@ -719,6 +746,7 @@ void TimelineController::applyTempoTimelineDelta(const composition::ProjectDelta
     }
     
     isApplyingDelta_ = false;
+    syncTempoToSession();
 }
 
 } // namespace bridge

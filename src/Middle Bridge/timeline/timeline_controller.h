@@ -111,6 +111,8 @@ public:
 
 private:
     void applyTempoTimelineDelta(const composition::ProjectDelta& delta, bool isUndo);
+    // Copies the tempo and time signature at the start into the session, so projects save them.
+    void syncTempoToSession();
 
     Layer3::ITransport* transport_;
     Layer2::ITempoService* tempoService_;

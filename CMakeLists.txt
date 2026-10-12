@@ -272,6 +272,11 @@ add_subdirectory(src/app)
 # Tests
 if(BUILD_TESTS)
     add_subdirectory(tests/unit)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME rhythm_to_drums_script
+                 COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/scripts/test_rhythm_to_drums.py")
+    endif()
 endif()
 
 #if(BUILD_PERFORMANCE_TESTS)

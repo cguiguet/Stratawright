@@ -603,6 +603,15 @@ daw-cli track auto-color
 daw-cli prep gain-stage --track 1..4 --target-rms -18.0
 ```
 
+### Workflow A2: Turning a Recorded Rhythm into Drums
+Record the rhythm on an audio track (beatbox, taps on a guitar body...), then, from the Stratawright repository:
+```bash
+daw-cli clip list --track 2                                              # find the take's CLIP_ID
+python3 scripts/rhythm_to_drums.py --track 2 --clip 7 --dry-run          # preview the pattern
+python3 scripts/rhythm_to_drums.py --track 2 --clip 7 --kit 25           # new "Drums" track, TR-808 kit
+```
+Hits are sorted by brightness into kick (36), snare (38) and closed hi-hat (42), snapped to 1/16 at the project tempo. `clip list` gives each audio clip's `PATH` and `SOURCE_OFFSET_FRAMES`, which the script uses to place the hits.
+
 ### Workflow B: Applying and Distributing an EQ Plugin Chain
 ```bash
 # 1. Search for available EQ plugins

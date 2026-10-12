@@ -22,6 +22,10 @@ class IHardwareSettingsFacade;
 class IMidiEditorController;
 }
 
+namespace presentation::chat {
+class ChatPanel;
+}
+
 namespace presentation::views {
 class TopControlPanel;
 class MixerWindow;
@@ -104,6 +108,8 @@ private:
     class PianoRollWindow* m_pianoRollWindow{nullptr};
     class QSplitter*      m_mainSplitter{nullptr};
     class MixerWindow*    m_mixerWindow{nullptr};
+    class QDockWidget*    m_chatDock{nullptr};
+    chat::ChatPanel*      m_chatPanel{nullptr};
     TopControlPanel*      m_topControlPanel{nullptr};
 
     // --- GUI Loop Director ---

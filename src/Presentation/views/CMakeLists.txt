@@ -9,6 +9,9 @@ add_library(layer7_views STATIC
     updates/upstream_pull_requests.cpp
     updates/upstream_pull_request_notifier.cpp
     chat/claude_stream.cpp
+    chat/claude_code_session.cpp
+    chat/assistant_instructions.cpp
+    chat/chat_panel.cpp
     mixer/base_tactile_control.cpp
     mixer/rotary_dial.cpp
     mixer/cyber_fader.cpp
@@ -81,6 +84,12 @@ add_library(layer7_views STATIC
     pianoroll_window/VelocityLaneView.cpp
     pianoroll_window/ControllerLaneView.cpp
     pianoroll_window/PianoRollWindow.cpp
+)
+
+# The in-app assistant works in this checkout and builds into this build directory.
+target_compile_definitions(layer7_views PRIVATE
+    "STRATAWRIGHT_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\""
+    "STRATAWRIGHT_BUILD_DIR=\"${CMAKE_BINARY_DIR}\""
 )
 
 target_include_directories(layer7_views PUBLIC 

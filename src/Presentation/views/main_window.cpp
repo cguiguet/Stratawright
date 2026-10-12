@@ -7,7 +7,9 @@
 #include "top_control_panel/top_control_panel.h"
 #include "mixer/mixer_window.h"
 #include "settings/settings_dialog.h"
+#include "chat/chat_panel.h"
 #include "../shortcuts/ShortcutManager.h"
+#include <QDockWidget>
 #include <QShortcut>
 #include <QLineEdit>
 #include <QTextEdit>
@@ -75,6 +77,15 @@ MainWindow::MainWindow(QWidget* parent)
 
     setCentralWidget(centralWidget);
 
+    // 3e. Claude chat panel, docked on the right (Cmd+J / Alt+4)
+    m_chatPanel = new chat::ChatPanel();
+    m_chatDock = new QDockWidget(QStringLiteral("Claude"), this);
+    m_chatDock->setObjectName(QStringLiteral("claudeChatDock"));
+    m_chatDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    m_chatDock->setWidget(m_chatPanel);
+    m_chatDock->setMinimumWidth(340);
+    addDockWidget(Qt::RightDockWidgetArea, m_chatDock);
+
     // Global Navigation & View Shortcuts via ShortcutManager
     auto& sm = presentation::shortcuts::ShortcutManager::instance();
     using presentation::shortcuts::ShortcutAction;
@@ -99,6 +110,16 @@ MainWindow::MainWindow(QWidget* parent)
     sm.bindSequence(this, QKeySequence("Alt+3"), [this]() {
         toggleWindowVisibility(bridge::WorkspaceWindow::Mixer);
     }, Qt::ApplicationShortcut);
+
+    const auto toggleChat = [this]() {
+        const bool show = !m_chatDock->isVisible();
+        m_chatDock->setVisible(show);
+        if (show) {
+            m_chatPanel->focusInput();
+        }
+    };
+    sm.bindSequence(this, QKeySequence("Ctrl+J"), toggleChat, Qt::ApplicationShortcut);
+    sm.bindSequence(this, QKeySequence("Alt+4"), toggleChat, Qt::ApplicationShortcut);
 
     sm.bind(this, ShortcutAction::Global_ToggleMetronome, [this]() {
         if (m_timelineController) {

@@ -18,6 +18,9 @@ struct ProjectSerializer {
     /**
      * @brief Deserialize a binary buffer into a ProjectState POD tree.
      */
+    // Format version of a project file from its 13-byte header: 7, 6, or 0 if unsupported.
+    static int headerVersion(const char* data, size_t size);
+
     static bool deserialize(
         const std::vector<uint8_t>& inBuffer,
         ProjectState& outState

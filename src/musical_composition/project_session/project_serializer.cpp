@@ -53,7 +53,7 @@ bool ProjectSerializer::serialize(
     outBuffer.clear();
 
     // ---- Header ----
-    const char* header = "AGDAW_PROJ_V6";
+    const char* header = "AGDAW_PROJ_V7";
     writeBytes(outBuffer, header, std::strlen(header));
 
     // ---- Metadata ----
@@ -96,6 +96,10 @@ bool ProjectSerializer::serialize(
         writeT(outBuffer, track.outputTargetTrackId.generation);
         writeT(outBuffer, track.inputSourceIndex);
         writeT(outBuffer, track.automationMode);
+        writeT(outBuffer, track.faderGainLinear);  // V7: mixer state
+        writeT(outBuffer, track.pan);
+        writeT(outBuffer, static_cast<uint8_t>(track.isMuted ? 1 : 0));
+        writeT(outBuffer, static_cast<uint8_t>(track.isSoloed ? 1 : 0));
 
         // Automation Lanes
         writeT(outBuffer, static_cast<uint32_t>(track.automationLanes.size()));
@@ -216,6 +220,14 @@ bool ProjectSerializer::serialize(
 // Deserialize
 // =============================================================================
 
+int ProjectSerializer::headerVersion(const char* data, size_t size) {
+    constexpr size_t headerLen = 13;
+    if (!data || size < headerLen) return 0;
+    if (std::memcmp(data, "AGDAW_PROJ_V7", headerLen) == 0) return 7;
+    if (std::memcmp(data, "AGDAW_PROJ_V6", headerLen) == 0) return 6;  // no mixer state
+    return 0;
+}
+
 bool ProjectSerializer::deserialize(
     const std::vector<uint8_t>& inBuffer,
     ProjectState& outState
@@ -225,7 +237,8 @@ bool ProjectSerializer::deserialize(
     // ---- Header ----
     const size_t headerLen = 13;
     if (inBuffer.size() < headerLen) return false;
-    if (std::memcmp(inBuffer.data(), "AGDAW_PROJ_V6", headerLen) != 0) {
+    const int version = headerVersion(reinterpret_cast<const char*>(inBuffer.data()), inBuffer.size());
+    if (version == 0) {
         return false;
     }
     offset += headerLen;
@@ -286,6 +299,15 @@ bool ProjectSerializer::deserialize(
         if (!readT(inBuffer, offset, track.outputTargetTrackId.generation)) return false;
         if (!readT(inBuffer, offset, track.inputSourceIndex))               return false;
         if (!readT(inBuffer, offset, track.automationMode))                 return false;
+        if (version >= 7) {
+            uint8_t muted = 0, soloed = 0;
+            if (!readT(inBuffer, offset, track.faderGainLinear)) return false;
+            if (!readT(inBuffer, offset, track.pan))             return false;
+            if (!readT(inBuffer, offset, muted))                 return false;
+            if (!readT(inBuffer, offset, soloed))                return false;
+            track.isMuted = (muted != 0);
+            track.isSoloed = (soloed != 0);
+        }
 
         // Automation Lanes
         uint32_t laneCount = 0;

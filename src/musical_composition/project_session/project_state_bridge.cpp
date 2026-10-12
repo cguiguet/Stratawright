@@ -154,6 +154,10 @@ ProjectState ProjectStateBridge::extract(
             tState.comments = comments;
             tState.outputTargetTrackId = info.outputTargetTrackId;
             tState.inputSourceIndex = info.inputSourceIndex;
+            tState.faderGainLinear = trackManager->getTrackFaderGain(trackId);
+            tState.pan = trackManager->getTrackPan(trackId);
+            tState.isMuted = trackManager->getTrackMute(trackId);
+            tState.isSoloed = trackManager->getTrackSolo(trackId);
 
             // Automation Modes & Lanes
             auto* manager = trackManager->getAutomationManager(trackId);
@@ -274,6 +278,9 @@ ProjectState ProjectStateBridge::extract(
             mState.outputTargetTrackId = TrackID::invalid();
             mState.inputSourceIndex = 0;
             mState.automationMode = static_cast<uint8_t>(AutomationMode::READ);
+            mState.faderGainLinear = trackManager->getTrackFaderGain(TrackID{0, 0});
+            mState.pan = trackManager->getTrackPan(TrackID{0, 0});
+            mState.isMuted = trackManager->getTrackMute(TrackID{0, 0});
             mState.hasPlaylist = false;
             mState.hasSequencer = false;
             mState.hasInstrument = false;
@@ -379,6 +386,7 @@ bool ProjectStateBridge::restore(
     if (state.tracks.size() > 0 && !trackManager) return false;
 
     std::vector<std::pair<TrackID, TrackID>> routingFixups;
+    std::vector<TrackID> soloedTracks;
     routingFixups.reserve(state.tracks.size());
 
     for (const auto& track : state.tracks) {
@@ -582,6 +590,23 @@ bool ProjectStateBridge::restore(
         // Restore Sidechains for track
         for (const auto& sc : track.sidechains) {
             trackManager->setTrackSidechainRouting(restoredId, sc.slotIndex, sc.sourceTrackId, sc.sendGainLinear);
+        }
+
+        // Mixer state, through the internal setters: DSP node and cache in sync, no undo history.
+        if (auto* mixer = dynamic_cast<TrackManagerImpl*>(trackManager)) {
+            mixer->setTrackFaderGainInternal(restoredId, track.faderGainLinear);
+            mixer->setTrackPanInternal(restoredId, track.pan);
+            mixer->setTrackMuteInternal(restoredId, track.isMuted);
+            if (track.isSoloed) {
+                soloedTracks.push_back(restoredId);
+            }
+        }
+    }
+
+    // Solo last: it recomputes which tracks are implicitly muted across the whole project.
+    if (auto* mixer = dynamic_cast<TrackManagerImpl*>(trackManager)) {
+        for (const TrackID& soloed : soloedTracks) {
+            mixer->setTrackSoloInternal(soloed, true);
         }
     }
 

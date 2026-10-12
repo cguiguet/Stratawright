@@ -371,3 +371,57 @@ TEST_CASE("Project Mix Statistics Serialization & Invalidation", "[Layer5][MixSt
     std::memcpy(legacyBuffer.data(), v5Header, 13);
     REQUIRE(ProjectSerializer::deserialize(legacyBuffer, state3) == false);
 }
+
+TEST_CASE("Project V7 saves track mixer state and still reads V6", "[Layer5][Serialization]") {
+    const auto makeState = [](float gain, float pan, bool muted, bool soloed) {
+        ProjectState state;
+        state.metadata.projectName = "Mixer";
+        TrackState track{};
+        track.trackId = TrackID{3, 1};
+        track.type = TrackType::AUDIO;
+        track.name = "Bass";
+        track.outputTargetTrackId = TrackID::invalid();
+        track.faderGainLinear = gain;
+        track.pan = pan;
+        track.isMuted = muted;
+        track.isSoloed = soloed;
+        state.tracks.push_back(track);
+        return state;
+    };
+
+    std::vector<uint8_t> buffer;
+    REQUIRE(ProjectSerializer::serialize(makeState(0.1f, 0.35f, true, true), buffer));
+    CHECK(ProjectSerializer::headerVersion(reinterpret_cast<const char*>(buffer.data()), buffer.size()) == 7);
+
+    ProjectState loaded;
+    REQUIRE(ProjectSerializer::deserialize(buffer, loaded));
+    REQUIRE(loaded.tracks.size() == 1);
+    CHECK(loaded.tracks[0].faderGainLinear == 0.1f);
+    CHECK(loaded.tracks[0].pan == 0.35f);
+    CHECK(loaded.tracks[0].isMuted);
+    CHECK(loaded.tracks[0].isSoloed);
+
+    // A V6 file is the same without the 10 mixer bytes (gain, pan, mute, solo). Find them by
+    // diffing with a save whose gain differs from the first byte on (0.1f vs 0.3f).
+    std::vector<uint8_t> other;
+    REQUIRE(ProjectSerializer::serialize(makeState(0.3f, 0.35f, true, true), other));
+    REQUIRE(other.size() == buffer.size());
+    size_t mixerOffset = 0;
+    while (mixerOffset < buffer.size() && buffer[mixerOffset] == other[mixerOffset]) ++mixerOffset;
+    REQUIRE(mixerOffset + 10 <= buffer.size());
+
+    std::vector<uint8_t> v6(buffer);
+    v6.erase(v6.begin() + static_cast<std::ptrdiff_t>(mixerOffset), v6.begin() + static_cast<std::ptrdiff_t>(mixerOffset + 10));
+    std::memcpy(v6.data(), "AGDAW_PROJ_V6", 13);
+    ProjectState legacy;
+    REQUIRE(ProjectSerializer::deserialize(v6, legacy));
+    REQUIRE(legacy.tracks.size() == 1);
+    CHECK(legacy.tracks[0].name == "Bass");
+    CHECK(legacy.tracks[0].faderGainLinear == 1.0f);
+    CHECK(legacy.tracks[0].pan == 0.5f);
+    CHECK_FALSE(legacy.tracks[0].isMuted);
+    CHECK_FALSE(legacy.tracks[0].isSoloed);
+
+    std::memcpy(buffer.data(), "AGDAW_PROJ_V5", 13);
+    CHECK(ProjectSerializer::headerVersion(reinterpret_cast<const char*>(buffer.data()), buffer.size()) == 0);
+}

@@ -239,7 +239,11 @@ bool ProjectJsonSerializer::serialize(
             {"comments", track.comments},
             {"outputTargetTrackId", {{"id", track.outputTargetTrackId.id}, {"generation", track.outputTargetTrackId.generation}}},
             {"inputSourceIndex", track.inputSourceIndex},
-            {"automationMode", track.automationMode}
+            {"automationMode", track.automationMode},
+            {"faderGainLinear", track.faderGainLinear},
+            {"pan", track.pan},
+            {"isMuted", track.isMuted},
+            {"isSoloed", track.isSoloed}
         };
 
         // Automation Lanes
@@ -463,6 +467,10 @@ bool ProjectJsonSerializer::deserialize(
             }
             tState.inputSourceIndex = track.value("inputSourceIndex", 0u);
             tState.automationMode = track.value("automationMode", static_cast<uint8_t>(0));
+            tState.faderGainLinear = track.value("faderGainLinear", 1.0f);  // absent before mixer state was saved
+            tState.pan = track.value("pan", 0.5f);
+            tState.isMuted = track.value("isMuted", false);
+            tState.isSoloed = track.value("isSoloed", false);
 
             // Automation Lanes
             if (track.contains("automationLanes")) {

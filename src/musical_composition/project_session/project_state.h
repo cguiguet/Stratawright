@@ -60,6 +60,11 @@ struct TrackState {
     uint32_t inputSourceIndex;
     
     uint8_t automationMode;
+    // Mixer (format V7 and later; older files load with these defaults)
+    float faderGainLinear = 1.0f;
+    float pan = 0.5f;  // 0..1, 0.5 = centre
+    bool isMuted = false;
+    bool isSoloed = false;
     std::vector<AutomationLaneState> automationLanes;
     
     bool hasPlaylist = false;

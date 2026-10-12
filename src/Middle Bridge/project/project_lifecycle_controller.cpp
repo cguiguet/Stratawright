@@ -1,5 +1,6 @@
 // src/Middle Bridge/project_lifecycle_controller.cpp
 #include "project/project_lifecycle_controller.h"
+#include "musical_composition/project_session/project_serializer.h"
 #include <fstream>
 #include <cstring>
 
@@ -120,7 +121,7 @@ bool ProjectLifecycleController::loadProject(const char* absoluteFilePath) {
     
     char magic[14] = {0};
     file.read(magic, 13);
-    if (std::strcmp(magic, "AGDAW_PROJ_V6") != 0) {
+    if (composition::ProjectSerializer::headerVersion(magic, 13) == 0) {
         isPending_.store(false);
         return false;
     }

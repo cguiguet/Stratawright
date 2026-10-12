@@ -1,5 +1,6 @@
 #include "../common/ipc_protocol.h"
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <span>
@@ -102,11 +103,26 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // The server closes the connection once it has replied: read until EOF so long
+    // responses (e.g. big track lists) are not cut at the first 4 KB.
+    std::string response;
     std::array<char, 4096> buffer{};
-    const ssize_t bytesRead = ::read(sock.get(), buffer.data(), buffer.size() - 1);
-    if (bytesRead > 0) {
-        std::cout << std::string_view(buffer.data(), static_cast<std::size_t>(bytesRead));
+    for (;;) {
+        const ssize_t bytesRead = ::read(sock.get(), buffer.data(), buffer.size());
+        if (bytesRead <= 0) {
+            break;
+        }
+        response.append(buffer.data(), static_cast<std::size_t>(bytesRead));
     }
 
+    // Failures come back as `ERROR <code> <SYMBOL> "<message>"`: print them on stderr and exit
+    // with <code>, as documented in the daw-cli skill, so scripts and agents can detect them.
+    if (response.rfind("ERROR ", 0) == 0) {
+        std::cerr << response;
+        const long code = std::strtol(response.c_str() + 6, nullptr, 10);
+        return (code > 0 && code < 256) ? static_cast<int>(code) : 1;
+    }
+
+    std::cout << response;
     return 0; // RAII closes socket cleanly on exit
 }

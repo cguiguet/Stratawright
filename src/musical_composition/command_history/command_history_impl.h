@@ -17,6 +17,9 @@ public:
     bool undo() override;
     bool redo() override;
     void clear() override;
+    // Forgets the undo and redo steps (e.g. made invalid by a sample rate change) without making
+    // unsaved changes look saved.
+    void dropSteps();
     bool canUndo() const override;
     bool canRedo() const override;
     bool isDirty() const override;
@@ -36,6 +39,7 @@ private:
     OnHistoryChangedCallback onHistoryChanged_;
 
     std::vector<HistoryEntry> undoStack_;
+    bool dirtyWithoutSteps_ = false; // unsaved changes whose steps were dropped
     std::vector<HistoryEntry> redoStack_;
     std::array<DeltaHandler, static_cast<size_t>(SubsystemID::COUNT)> handlers_;
     

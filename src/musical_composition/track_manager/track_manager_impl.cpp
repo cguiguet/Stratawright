@@ -1121,6 +1121,48 @@ void TrackManagerImpl::setProjectSampleRate(uint32_t sampleRate) {
     }
 }
 
+void TrackManagerImpl::convertSampleRate(const SampleRateConversion& convert) {
+    if (convert.changesAnything()) {
+        for (auto& [trackIdVal, state] : tracks_) {
+            for (auto& [arrId, arrState] : state.arrangements) {
+                if (auto* playImpl = dynamic_cast<PlaylistImpl*>(arrState.playlist.get())) {
+                    for (auto& entry : playImpl->getMutableRegions()) {
+                        TimelineRegion& region = entry.region;
+                        // MIDI regions measure their source in project samples; audio regions in
+                        // samples of their file, which keeps its own rate.
+                        if (region.type == RegionType::MIDI) {
+                            region.sourceLength = convert.length(region.positionSample, region.sourceLength);
+                            region.sourceStartSample = convert(region.sourceStartSample);
+                        }
+                        region.fadeInSamples = convert(region.fadeInSamples);
+                        region.fadeOutSamples = convert(region.fadeOutSamples);
+                        region.positionSample = convert(region.positionSample);
+                    }
+                }
+                if (auto* seqImpl = dynamic_cast<MIDISequencerImpl*>(arrState.midiSequencer.get())) {
+                    seqImpl->convertSampleRate(convert);
+                }
+                if (auto* autoImpl = dynamic_cast<AutomationLaneManagerImpl*>(arrState.automationManager.get())) {
+                    for (const auto& [target, lane] : autoImpl->getLanes()) {
+                        if (auto* laneImpl = dynamic_cast<AutomationLaneImpl*>(lane.get())) {
+                            auto points = laneImpl->getPointsList();
+                            for (auto& point : points) {
+                                point.positionSample = convert(point.positionSample);
+                            }
+                            laneImpl->setPointsList(points);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (convert.to != 0) {
+        setProjectSampleRate(convert.to);
+    }
+    syncRTSequencerList();
+    compileTimelineSnapshot();
+}
+
 void TrackManagerImpl::compileTimelineSnapshot() {
     if (!kernel_) return;
 

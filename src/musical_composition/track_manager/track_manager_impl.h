@@ -8,6 +8,7 @@
 #include "musical_composition/command_history/icommand_history.h"
 #include "musical_composition/interfaces/iarrangement_manager.h"
 #include "mixer_routing_commands.h"
+#include "musical_composition/sample_rate_conversion.h"
 #include <unordered_map>
 #include <memory>
 #include <vector>
@@ -128,6 +129,9 @@ public:
 
     void compileTimelineSnapshot() override;
     void setProjectSampleRate(uint32_t sampleRate) override;
+    // Converts every track's timeline (regions, MIDI, automation; all arrangements) to another
+    // sample rate, which becomes the project rate, and republishes it to the audio thread.
+    void convertSampleRate(const SampleRateConversion& convert);
     void recalculateTimeCaches(Layer2::ITempoService* tempoService) override;
 
     // IMidiClipDataProvider Overrides

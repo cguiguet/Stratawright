@@ -79,6 +79,10 @@ public:
     // Keeps the tempo and time signature saved with the project in step with the tempo service,
     // which owns their undo history: records no undo step of its own.
     virtual void syncTempoMetadata(double /*bpm*/, uint8_t /*numerator*/, uint8_t /*denominator*/) {}
+    // Moves the project to another sample rate: every position stored in samples is converted so
+    // that it stays at the same musical time, and the new rate is recorded. Not undoable: the undo
+    // history (positions at the old rate) is cleared.
+    virtual void convertSampleRate(uint32_t /*newSampleRate*/) {}
 
     virtual MixStatistics getMixStatistics() const = 0;
     virtual void setMixStatistics(const MixStatistics& stats) = 0;

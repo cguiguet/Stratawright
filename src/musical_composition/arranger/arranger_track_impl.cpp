@@ -97,4 +97,11 @@ void ArrangerTrackImpl::applyDelta(const ProjectDelta& delta, bool isUndo) {
     }
 }
 
+void ArrangerTrackImpl::convertSampleRate(const SampleRateConversion& convert) {
+    for (auto& section : sections_) {
+        section.lengthSamples = convert.length(section.startSample, section.lengthSamples);
+        section.startSample = convert(section.startSample);
+    }
+}
+
 } // namespace composition

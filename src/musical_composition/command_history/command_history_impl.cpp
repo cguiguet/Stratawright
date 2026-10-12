@@ -122,9 +122,19 @@ bool CommandHistoryImpl::redo() {
 // ---------------------------------------------------------------------------
 
 void CommandHistoryImpl::clear() {
+    dirtyWithoutSteps_ = false;
     undoStack_.clear();
     redoStack_.clear();
     // Also discard any partially-open compound
+    inCompound_ = false;
+    pendingCompound_.steps.clear();
+    if (onHistoryChanged_) onHistoryChanged_();
+}
+
+void CommandHistoryImpl::dropSteps() {
+    dirtyWithoutSteps_ = isDirty();
+    undoStack_.clear();
+    redoStack_.clear();
     inCompound_ = false;
     pendingCompound_.steps.clear();
     if (onHistoryChanged_) onHistoryChanged_();
@@ -139,7 +149,7 @@ bool CommandHistoryImpl::canRedo() const {
 }
 
 bool CommandHistoryImpl::isDirty() const {
-    return !undoStack_.empty();
+    return !undoStack_.empty() || dirtyWithoutSteps_;
 }
 
 // ---------------------------------------------------------------------------

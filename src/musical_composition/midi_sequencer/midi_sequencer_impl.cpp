@@ -498,6 +498,43 @@ void MIDISequencerImpl::recalculateTimeCaches(Layer2::ITempoService* tempoServic
     syncRTBuffer();
 }
 
+void MIDISequencerImpl::convertSampleRate(const SampleRateConversion& convert) {
+    if (!convert.changesAnything()) return;
+
+    // Note and controller timings are relative to their clip: convert them through absolute
+    // positions, using the clip's position before conversion.
+    const auto clipStart = [this](ClipID clipId) -> uint64_t {
+        auto it = std::find_if(clipPositions_.begin(), clipPositions_.end(),
+            [&](const ClipPositionEntry& c) { return c.clipId == clipId; });
+        return it != clipPositions_.end() ? it->positionSample : 0;
+    };
+    const auto relative = [&](uint64_t start, uint64_t offset) {
+        return convert(start + offset) - convert(start);
+    };
+
+    for (auto& entry : notes_) {
+        MIDINote& note = entry.note;
+        const uint64_t start = clipStart(entry.clipId);
+        const uint64_t noteStart = start + note.offsetSample;
+        note.durationSample = convert.length(noteStart, note.durationSample);
+        note.offsetSample = relative(start, note.offsetSample);
+        note.startSample = convert(note.startSample);
+        note.endSample = convert(note.endSample);
+    }
+    for (auto& cc : ccPoints_) {
+        cc.point.samplePosition = relative(clipStart(cc.clipId), cc.point.samplePosition);
+    }
+    for (auto& pb : pitchPoints_) {
+        pb.point.samplePosition = relative(clipStart(pb.clipId), pb.point.samplePosition);
+    }
+    for (auto& clip : clipPositions_) {
+        clip.sourceLength = convert.length(clip.positionSample, clip.sourceLength);
+        clip.positionSample = convert(clip.positionSample);
+    }
+
+    syncRTBuffer();
+}
+
 void MIDISequencerImpl::restoreClipPosition(const ClipPositionEntry& entry) {
     clipPositions_.push_back(entry);
     syncRTBuffer();

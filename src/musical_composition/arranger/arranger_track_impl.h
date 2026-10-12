@@ -1,6 +1,7 @@
 #pragma once
 #include "iarranger_track.h"
 #include "musical_composition/command_history/delta_primitives.h"
+#include "musical_composition/sample_rate_conversion.h"
 #include <vector>
 
 namespace composition {
@@ -18,6 +19,7 @@ public:
     uint32_t getAllSections(Section* outSections, uint32_t maxSections) const override;
     
     void applyDelta(const ProjectDelta& delta, bool isUndo);
+    void convertSampleRate(const SampleRateConversion& convert);
 
 private:
     ICommandHistory* history_;

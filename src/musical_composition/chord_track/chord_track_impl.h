@@ -1,6 +1,7 @@
 #pragma once
 #include "ichord_track.h"
 #include "musical_composition/command_history/delta_primitives.h"
+#include "musical_composition/sample_rate_conversion.h"
 #include <vector>
 
 namespace composition {
@@ -18,6 +19,7 @@ public:
     bool getActiveChordAt(uint64_t samplePosition, ChordEvent& outChord) const override;
 
     void applyDelta(const ProjectDelta& delta, bool isUndo);
+    void convertSampleRate(const SampleRateConversion& convert);
 
 private:
     ICommandHistory* history_;

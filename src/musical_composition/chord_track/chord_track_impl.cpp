@@ -121,4 +121,10 @@ void ChordTrackImpl::applyDelta(const ProjectDelta& delta, bool isUndo) {
     }
 }
 
+void ChordTrackImpl::convertSampleRate(const SampleRateConversion& convert) {
+    for (auto& chord : chords_) {
+        chord.positionSample = convert(chord.positionSample);
+    }
+}
+
 } // namespace composition

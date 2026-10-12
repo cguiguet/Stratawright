@@ -11,6 +11,7 @@ add_executable(musical_composition_unit_tests
     timeline_markers_calculations_test.cpp
     track_sidechain_test.cpp
     plugin_teardown_test.cpp
+    sample_rate_conversion_test.cpp
 )
 
 target_include_directories(musical_composition_unit_tests PRIVATE

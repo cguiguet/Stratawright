@@ -2,6 +2,7 @@
 #include "imidi_sequencer.h"
 #include "musical_composition/command_history/delta_primitives.h"
 #include "Core infrastructure/tempo/itempo_service.h"
+#include "musical_composition/sample_rate_conversion.h"
 #include <vector>
 #include <atomic>
 #include <memory>
@@ -38,6 +39,9 @@ public:
 
     void applyDelta(const ProjectDelta& delta, bool isUndo);
     void copyFrom(const MIDISequencerImpl* other);
+
+    // Converts clip positions and note, CC and pitch-bend timings to another sample rate.
+    void convertSampleRate(const SampleRateConversion& convert);
 
     // Raw getters for arrangement cloning
     struct NoteEntry {

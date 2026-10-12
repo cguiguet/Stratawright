@@ -23,6 +23,7 @@
 #include "metadata_commands.h"
 #include "musical_composition/region_manager/source_manager_commands.h"
 #include <fstream>
+#include <limits>
 
 namespace composition {
 
@@ -251,6 +252,37 @@ public:
         metadata_.initialTempoBPM = static_cast<float>(bpm);
         metadata_.timeSignatureNumerator = numerator;
         metadata_.timeSignatureDenominator = denominator;
+    }
+
+    void convertSampleRate(uint32_t newSampleRate) override {
+        if (newSampleRate == 0) return;
+        const SampleRateConversion convert{metadata_.sampleRate, newSampleRate};
+        if (convert.changesAnything()) {
+            static_cast<TrackManagerImpl*>(trackManager_.get())->convertSampleRate(convert);
+
+            std::vector<MarkerInfo> markers(4096);
+            const uint32_t markerCount = markerManager_->getMarkersInRange(
+                0, std::numeric_limits<uint64_t>::max(), markers.data(), static_cast<uint32_t>(markers.size()));
+            for (uint32_t i = 0; i < markerCount; ++i) {
+                const MarkerInfo& marker = markers[i];
+                markerManager_->updateMarker(marker.uuid, convert(marker.framePosition), marker.label, marker.colorARGB, false);
+            }
+
+            std::vector<KeySignaturePoint> keySignatures = keySignatureMap_->getEvents();
+            for (auto& point : keySignatures) {
+                point.positionSample = convert(point.positionSample);
+            }
+            keySignatureMap_->setEvents(keySignatures);
+
+            static_cast<ArrangerTrackImpl*>(arrangerTrack_.get())->convertSampleRate(convert);
+            static_cast<ChordTrackImpl*>(chordTrack_.get())->convertSampleRate(convert);
+
+            // Undo steps and copied material hold positions at the old rate.
+            static_cast<CommandHistoryImpl*>(commandHistory_.get())->dropSteps();
+            clipboard_->clear();
+        }
+        metadata_.sampleRate = newSampleRate;
+        trackManager_->setProjectSampleRate(newSampleRate);
     }
 
     MixStatistics getMixStatistics() const override { return mixStats_; }

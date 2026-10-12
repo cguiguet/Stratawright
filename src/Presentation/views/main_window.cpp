@@ -8,6 +8,7 @@
 #include "mixer/mixer_window.h"
 #include "settings/settings_dialog.h"
 #include "chat/chat_panel.h"
+#include "relaunch.h"
 #include "../shortcuts/ShortcutManager.h"
 #include <QDockWidget>
 #include <QShortcut>
@@ -85,6 +86,15 @@ MainWindow::MainWindow(QWidget* parent)
     m_chatDock->setWidget(m_chatPanel);
     m_chatDock->setMinimumWidth(340);
     addDockWidget(Qt::RightDockWidgetArea, m_chatDock);
+    // Relaunch keeps the project: save a snapshot, restart, restore it at the next boot.
+    connect(m_chatPanel, &chat::ChatPanel::relaunchRequested, this, [this]() {
+        const QString error = relaunch::saveSnapshot(m_lifecycleController, m_timelineController);
+        if (!error.isEmpty()) {
+            m_chatPanel->showError(error + QStringLiteral(" Save it yourself (Cmd+S), then press Relaunch again."));
+            return;
+        }
+        relaunch::relaunchApplication();
+    });
 
     // Global Navigation & View Shortcuts via ShortcutManager
     auto& sm = presentation::shortcuts::ShortcutManager::instance();
@@ -248,6 +258,7 @@ void MainWindow::setPlaylistControllers(const PlaylistWindow::Controllers& playl
     }
 
     m_arrangementController = playlistCtrls.arrangement;
+    m_lifecycleController = playlistCtrls.lifecycle;
 
     m_playlistWindow = new PlaylistWindow(playlistCtrls, this);
     m_mainSplitter->insertWidget(0, m_playlistWindow);

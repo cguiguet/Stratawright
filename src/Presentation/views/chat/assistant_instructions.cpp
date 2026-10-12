@@ -34,7 +34,7 @@ The DAW is running. Drive it with `daw-cli` (see the daw-cli skill). What matter
 
 ## Changing the app itself
 The source is in {{SOURCE_DIR}} (a git repository; your working directory). Build with `cmake --build "{{BUILD_DIR}}" --target stratawright daw-cli --parallel`. Code compiles with -Werror and strict warnings; vendored code in src/third_party is not ours. Unit tests: `ctest --test-dir "{{BUILD_DIR}}"` when that build has BUILD_TESTS=ON.
-A rebuilt app only takes effect after a relaunch. After building a change, tell the user to press "Relaunch" in the chat panel: this conversation resumes after the relaunch, but the project is not kept unless saved.
+A rebuilt app only takes effect after a relaunch. After building a change, tell the user to press "Relaunch" in the chat panel: the open project (unsaved changes included), the playhead and this conversation all come back after the relaunch. `daw-cli project save` saves the project (`--path <file.agdaw>` if it was never saved); `daw-cli project info` shows its path and whether it has unsaved changes.
 App log (stdout and stderr of the running app): {{LOG_FILE}}. Crash reports: ~/Library/Logs/DiagnosticReports/stratawright-*.ips.
 
 ## Git

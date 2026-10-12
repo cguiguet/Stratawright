@@ -7,6 +7,7 @@
 #include "Presentation/views/boot/splash_screen.h"
 #include "Presentation/views/theme.h"
 #include "Presentation/views/updates/upstream_pull_request_notifier.h"
+#include "Presentation/views/relaunch.h"
 #include "Middle Bridge/boot/boot_controller.h"
 #include "Agentic layer/server/ipc_server.h"
 #include "Agentic layer/server/command_dispatcher.h"
@@ -354,7 +355,11 @@ void Application::onBootCompleted() {
     // Re-broadcast deferred (after layout, so canvas width is valid and
     // recalculateViewportEndFrame computes the full bar grid, not 1-2 bars).
     if (auto* sessionManager = compositionRoot.getSessionManager()) {
-        QTimer::singleShot(0, m_qapp.get(), [sessionManager]() {
+        auto* lifecycle = compositionRoot.getProjectLifecycleController();
+        auto* timeline = compositionRoot.getTimelineController();
+        QTimer::singleShot(0, m_qapp.get(), [sessionManager, lifecycle, timeline]() {
+            // After a Relaunch from the chat panel, put the project back before the refresh.
+            presentation::relaunch::restoreSnapshot(lifecycle, timeline);
             sessionManager->triggerSessionRefresh();
         });
     }

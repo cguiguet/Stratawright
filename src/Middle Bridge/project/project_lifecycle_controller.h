@@ -63,6 +63,7 @@ public:
     bool createNewProject(const ProjectMetadataState& metadata) override;
     bool loadProject(const char* absoluteFilePath) override;
     bool saveProject(const char* absoluteFilePath = "") override;
+    bool restoreProject(const char* snapshotFilePath, const char* projectPath, bool hadUnsavedChanges) override;
     bool exportProjectToJson(const char* absoluteFilePath) override;
     bool importProjectFromJson(const char* absoluteFilePath) override;
     void closeProject() override;
@@ -108,6 +109,7 @@ private:
     DSP::InstrumentTrackFactory* instrumentTrackF_;
 
     std::string currentProjectPath_;
+    bool restoredUnsavedChanges_ = false;  // a restored snapshot had changes not saved to currentProjectPath_
     bool wasRunning_ = false;
     std::vector<composition::MissingPluginReport> missingPlugins_;
 

@@ -3,13 +3,11 @@
 #include "assistant_instructions.h"
 #include "claude_code_session.h"
 
-#include <QApplication>
 #include <QDir>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QPlainTextEdit>
-#include <QProcess>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QTextBrowser>
@@ -62,7 +60,7 @@ ChatPanel::ChatPanel(QWidget* parent) : QWidget(parent) {
     stopButton_->setEnabled(false);
     auto* newButton = new QPushButton(QStringLiteral("New chat"), this);
     auto* relaunchButton = new QPushButton(QStringLiteral("Relaunch"), this);
-    relaunchButton->setToolTip(QStringLiteral("Restart Stratawright to load a rebuilt version; the conversation continues."));
+    relaunchButton->setToolTip(QStringLiteral("Restart Stratawright to load a rebuilt version; the project and the conversation are kept."));
 
     statusLabel_ = new QLabel(QStringLiteral("Claude Code"), this);
     statusLabel_->setObjectName(QStringLiteral("chatStatus"));
@@ -90,7 +88,7 @@ ChatPanel::ChatPanel(QWidget* parent) : QWidget(parent) {
         sessionCostUsd_ = 0.0;
         statusLabel_->setText(QStringLiteral("New conversation"));
     });
-    connect(relaunchButton, &QPushButton::clicked, this, &ChatPanel::relaunchApplication);
+    connect(relaunchButton, &QPushButton::clicked, this, &ChatPanel::relaunchRequested);
     connect(session_, &ClaudeCodeSession::streamEvent, this, &ChatPanel::onStreamEvent);
     connect(session_, &ClaudeCodeSession::busyChanged, this, &ChatPanel::onBusyChanged);
     connect(session_, &ClaudeCodeSession::failed, this, &ChatPanel::showError);
@@ -189,22 +187,6 @@ void ChatPanel::appendMarkdown(const QString& markdown) {
     cursor.insertBlock();
     cursor.insertMarkdown(markdown);
     transcript_->verticalScrollBar()->setValue(transcript_->verticalScrollBar()->maximum());
-}
-
-void ChatPanel::relaunchApplication() {
-    // A detached shell waits for this process to exit (killing it after 10 s if teardown hangs),
-    // then reopens the bundle, which by then holds the freshly built binary. `open -n`: right after
-    // the exit, LaunchServices may still see the app as running and a plain `open` would do nothing.
-    QString bundle = QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(QStringLiteral("../.."));
-    bundle = QDir::cleanPath(bundle);
-    const QString script = QStringLiteral(
-        "pid=$1; app=$2; i=0; "
-        "while kill -0 \"$pid\" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.2; i=$((i+1)); done; "
-        "kill -9 \"$pid\" 2>/dev/null; sleep 0.5; open -n \"$app\"");
-    QProcess::startDetached(QStringLiteral("/bin/sh"),
-                            {QStringLiteral("-c"), script, QStringLiteral("sh"),
-                             QString::number(QCoreApplication::applicationPid()), bundle});
-    QApplication::quit();
 }
 
 } // namespace presentation::chat

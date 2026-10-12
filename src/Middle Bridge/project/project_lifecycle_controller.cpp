@@ -95,6 +95,7 @@ bool ProjectLifecycleController::createNewProject(const ProjectMetadataState& me
 
     sessionManager_->setActiveSession(std::move(newSession));
     currentProjectPath_ = "";
+    restoredUnsavedChanges_ = false;
     progress_.store(0.9f);
     
     resumeAudioStream();
@@ -158,6 +159,7 @@ bool ProjectLifecycleController::loadProject(const char* absoluteFilePath) {
     sessionManager_->setActiveSession(std::move(newSession));
     
     currentProjectPath_ = absoluteFilePath;
+    restoredUnsavedChanges_ = false;
     
     resumeAudioStream();
     progress_.store(1.0f);
@@ -188,11 +190,22 @@ bool ProjectLifecycleController::saveProject(const char* absoluteFilePath) {
 
     if (success) {
         currentProjectPath_ = savePath;
+        restoredUnsavedChanges_ = false;
     }
     
     progress_.store(1.0f);
     isPending_.store(false);
     return success;
+}
+
+bool ProjectLifecycleController::restoreProject(const char* snapshotFilePath, const char* projectPath, bool hadUnsavedChanges) {
+    if (!loadProject(snapshotFilePath)) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    currentProjectPath_ = projectPath ? projectPath : "";
+    restoredUnsavedChanges_ = hadUnsavedChanges;
+    return true;
 }
 
 bool ProjectLifecycleController::exportProjectToJson(const char* absoluteFilePath) {
@@ -277,7 +290,7 @@ bool ProjectLifecycleController::isProjectDirty() const {
     auto* session = sessionManager_->getActiveSession();
     if (!session) return false;
     auto* history = session->getCommandHistory();
-    return history ? history->isDirty() : false;
+    return restoredUnsavedChanges_ || (history ? history->isDirty() : false);
 }
 
 std::string ProjectLifecycleController::getCurrentProjectPath() const {

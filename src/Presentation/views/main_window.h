@@ -20,6 +20,7 @@ class IInputModeController;
 class IWorkspaceController;
 class IHardwareSettingsFacade;
 class IMidiEditorController;
+class IProjectLifecycleController;
 }
 
 namespace presentation::chat {
@@ -117,6 +118,7 @@ private:
 
     bridge::IHardwareSettingsFacade* m_hardwareSettingsFacade{nullptr};
     bridge::ITimelineController* m_timelineController{nullptr};
+    bridge::IProjectLifecycleController* m_lifecycleController{nullptr};
     bridge::IWorkspaceController* m_workspaceController{nullptr};
     bridge::IArrangementController* m_arrangementController{nullptr};
 };

@@ -12,6 +12,7 @@ add_library(layer7_views STATIC
     chat/claude_code_session.cpp
     chat/assistant_instructions.cpp
     chat/chat_panel.cpp
+    relaunch.cpp
     mixer/base_tactile_control.cpp
     mixer/rotary_dial.cpp
     mixer/cyber_fader.cpp

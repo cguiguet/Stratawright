@@ -22,6 +22,11 @@ public:
     explicit ChatPanel(QWidget* parent = nullptr);
 
     void focusInput();
+    void showError(const QString& message);
+
+signals:
+    // The user asked to restart the app (to load a rebuilt version).
+    void relaunchRequested();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -30,10 +35,8 @@ private:
     void sendInput();
     void onStreamEvent(const StreamEvent& event);
     void onBusyChanged(bool busy);
-    void showError(const QString& message);
     void appendHtml(const QString& html);
     void appendMarkdown(const QString& markdown);
-    void relaunchApplication();
 
     ClaudeCodeSession* session_ = nullptr;
     QTextBrowser* transcript_ = nullptr;

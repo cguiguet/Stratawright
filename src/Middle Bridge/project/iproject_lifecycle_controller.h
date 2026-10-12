@@ -66,6 +66,13 @@ public:
     virtual bool saveProject(const char* absoluteFilePath = "") = 0;
 
     /**
+     * @brief Loads a snapshot (e.g. one saved before a relaunch) but keeps projectPath as the
+     *        project's path, so the next save goes to the user's file, not to the snapshot.
+     * @param hadUnsavedChanges Keeps the project marked as modified until it is saved.
+     */
+    virtual bool restoreProject(const char* /*snapshotFilePath*/, const char* /*projectPath*/, bool /*hadUnsavedChanges*/) { return false; }
+
+    /**
      * @brief Exports the project to a JSON file.
      */
     virtual bool exportProjectToJson(const char* absoluteFilePath) = 0;

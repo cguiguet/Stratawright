@@ -2,6 +2,7 @@
 #include "DSP nodes/tracks/instrument_track_node.h"
 #include "Core audio engine/plugin/iplugin.h"
 #include "common/dsp/event_scanner.h"
+#include "common/dsp/plugin_instance.h"
 #include "common/math/vector.h"
 #include <atomic>
 #include <cstdio>
@@ -179,8 +180,7 @@ void processInstrumentSlotState(
         }
 
         bool isFullyBypassed = s->bypass && s->bypassRamp.isStatic();
-        void* instancePtr = s->pluginInstance;
-        std::atomic_thread_fence(std::memory_order_acquire);
+        void* instancePtr = loadPluginInstance(s->pluginInstance);
 
         // Filter and adjust event offsets for this sub-block
         EventSegment segment = getSubBlockEvents(events, numEvents, start, end);

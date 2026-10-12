@@ -2,6 +2,7 @@
 #include "Core audio engine/plugin/iplugin.h"
 #include "Core audio engine/sidechain/isidechain_manager.h"
 #include "common/dsp/event_scanner.h"
+#include "common/dsp/plugin_instance.h"
 #include "common/math/vector.h"
 
 namespace DSP {
@@ -76,8 +77,9 @@ void processInsertPlugin(
     
     bool canSkipForSilence = isInputSilent && (s->tailSamplesRemaining == 0) && (localEventCount == 0);
 
-    if (!isFullyBypassed && s->pluginInstance && !canSkipForSilence) {
-        auto* plugin = static_cast<Layer3::IPlugin*>(s->pluginInstance);
+    void* instancePtr = loadPluginInstance(s->pluginInstance);
+    if (!isFullyBypassed && instancePtr && !canSkipForSilence) {
+        auto* plugin = static_cast<Layer3::IPlugin*>(instancePtr);
         
         uint32_t pluginOutCount = 0;
 

@@ -18,6 +18,7 @@
 #include "DSP nodes/tracks/instrument_track_node.h"
 #include "Hardware/OS abstraction/filesystem/ifile_system.h"
 #include <algorithm>
+#include <iterator>
 #include <cstdio>
 #include <iostream>
 
@@ -99,13 +100,9 @@ void TrackPipelineBuilderBase::destroyPipeline(
     const composition::TrackPipelineDescriptor &pipeline,
     IDSPKernel * /*kernel*/
 ) {
+  // The instrument's plugin instance belongs to the track manager, which frees it once the audio
+  // thread is done with it.
   if (pipeline.instrumentSlotNode.isValid()) {
-    if (auto* slotNode = DSP::getInstrumentSlotState(pipeline.instrumentSlotNode)) {
-      if (slotNode->pluginInstance) {
-        delete static_cast<Layer3::IPlugin*>(slotNode->pluginInstance);
-        slotNode->pluginInstance = nullptr;
-      }
-    }
     if (instrumentSlotF_) {
       pushRemoveNodeMutation(DSP::NODE_TYPE_INSTRUMENT_SLOT, pipeline.instrumentSlotNode);
       instrumentSlotF_->destroyNode(pipeline.instrumentSlotNode);
@@ -229,6 +226,8 @@ composition::TrackPipelineDescriptor AudioTrackPipelineBuilder::buildPipeline(
 
 void AudioTrackPipelineBuilder::destroyPipeline(
     const composition::TrackPipelineDescriptor &pipeline, IDSPKernel *kernel) {
+  // Streaming buffers the audio thread may be reading: released only after its blocks in flight.
+  std::vector<std::shared_ptr<Layer3::IStreamingBuffer>> releasedBuffers;
   if (pipeline.sourceNode.isValid() && audioSequencerF_) {
     if (auto *s = audioSequencerF_->getRegistry().get(pipeline.sourceNode)) {
       for (uint32_t i = 0; i < MAX_BUFFERS_PER_TRACK; ++i) {
@@ -237,14 +236,13 @@ void AudioTrackPipelineBuilder::destroyPipeline(
             butler_->unregisterBuffer(s->buffers[i]);
           }
 
-          auto it = std::remove_if(
+          auto it = std::stable_partition(
               buffers_.begin(), buffers_.end(),
               [s, i](const std::shared_ptr<Layer3::IStreamingBuffer> &b) {
-                return b.get() == s->buffers[i];
+                return b.get() != s->buffers[i];
               });
-          if (it != buffers_.end()) {
-            buffers_.erase(it, buffers_.end());
-          }
+          std::move(it, buffers_.end(), std::back_inserter(releasedBuffers));
+          buffers_.erase(it, buffers_.end());
         }
       }
       if (butler_) {
@@ -266,6 +264,12 @@ void AudioTrackPipelineBuilder::destroyPipeline(
   }
 
   TrackPipelineBuilderBase::destroyPipeline(pipeline, kernel);
+
+  if (!releasedBuffers.empty() && kernel && !kernel->waitForBlocksInFlight(500)) {
+    // The audio thread did not finish its block: leak the buffers rather than free them under it.
+    static std::vector<std::shared_ptr<Layer3::IStreamingBuffer>> leakedBuffers;
+    std::move(releasedBuffers.begin(), releasedBuffers.end(), std::back_inserter(leakedBuffers));
+  }
 }
 
 // ============================================================================

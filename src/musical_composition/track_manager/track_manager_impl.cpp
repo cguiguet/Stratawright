@@ -23,10 +23,12 @@
 #include "DSP nodes/latency/latency_node.h"
 #include "DSP nodes/tracks/audio_track_node.h"
 #include "DSP nodes/tracks/instrument_track_node.h"
+#include "common/dsp/plugin_instance.h"
 #include <cstring>
 #include <algorithm>
 #include <unordered_set>
 #include <limits>
+#include <iostream>
 
 namespace composition {
 
@@ -173,26 +175,81 @@ void TrackManagerImpl::deleteTrackInternal(TrackID id) {
         }
     }
 
-    // Delete plugin and instrument instances to prevent leaks
-    if (it->second.instrument.pluginInstance) {
-        delete static_cast<Layer3::IPlugin*>(it->second.instrument.pluginInstance);
-        it->second.instrument.pluginInstance = nullptr;
-    }
-    for (int s = 0; s < 8; ++s) {
-        if (it->second.plugins[s].pluginInstance) {
-            delete static_cast<Layer3::IPlugin*>(it->second.plugins[s].pluginInstance);
-            it->second.plugins[s].pluginInstance = nullptr;
+    // Take the track's plugins out of the audio graph first: the audio thread may be running them.
+    TrackState& track = it->second;
+    RetiredPlugins retired;
+    if (track.pipeline.instrumentSlotNode.isValid()) {
+        if (auto* slotNode = DSP::getInstrumentSlotState(track.pipeline.instrumentSlotNode)) {
+            retired.addInstance(DSP::exchangePluginInstance(slotNode->pluginInstance, nullptr));
         }
+    }
+    retired.addInstance(track.instrument.pluginInstance);
+    track.instrument.pluginInstance = nullptr;
+    DSP::PluginSlotState* insertChain = nullptr;
+    if (auto* trk = DSP::AudioTrackFactory::getRegistry().get(track.pipeline.trackNode)) {
+        insertChain = &trk->pluginSlot;
+    } else if (auto* trkInst = DSP::InstrumentTrackFactory::getRegistry().get(track.pipeline.trackNode)) {
+        insertChain = &trkInst->pluginSlot;
+    }
+    for (uint32_t s = 0; s < 8; ++s) {
+        if (insertChain) {
+            retireInsertPlugin(*insertChain, s, retired);
+        }
+        retired.addInstance(track.plugins[s].pluginInstance);
+        track.plugins[s].pluginInstance = nullptr;
     }
 
     // Delegate DSP teardown
-    builder_->destroyPipeline(it->second.pipeline, kernel_);
+    builder_->destroyPipeline(track.pipeline, kernel_);
 
-    // Erase from map
-    tracks_.erase(it);
+    // Out of the map, but kept alive until the audio thread has moved on to sequencer lists and
+    // timeline snapshots without it.
+    auto removedTrack = tracks_.extract(it);
 
     syncRTSequencerList();
     compileTimelineSnapshot();
+
+    if (!freeAfterAudioThread(retired)) {
+        // A block still running may be reading the track's sequencers: keep them too.
+        static std::vector<decltype(removedTrack)> leakedTracks;
+        leakedTracks.push_back(std::move(removedTrack));
+    }
+}
+
+void TrackManagerImpl::RetiredPlugins::addInstance(void* instance) {
+    if (instance && std::find(instances.begin(), instances.end(), instance) == instances.end()) {
+        instances.push_back(instance);
+    }
+}
+
+void TrackManagerImpl::retireInsertPlugin(DSP::PluginSlotState& slotNode, uint32_t slotIndex, RetiredPlugins& retired) {
+    const NodeID pluginNodeId = slotNode.slots[slotIndex];
+    if (!pluginNodeId.isValid()) return;
+    slotNode.slots[slotIndex] = NodeID::invalid();
+    slotNode.bypass[slotIndex] = false;
+    if (auto* pluginState = DSP::InsertPluginFactory::getRegistry().get(pluginNodeId)) {
+        retired.addInstance(DSP::exchangePluginInstance(pluginState->pluginInstance, nullptr));
+    }
+    retired.insertNodes.push_back(pluginNodeId);
+}
+
+bool TrackManagerImpl::freeAfterAudioThread(RetiredPlugins& retired) {
+    if (retired.instances.empty() && retired.insertNodes.empty()) return true;
+    constexpr uint32_t kAudioThreadTimeoutMs = 500;
+    if (kernel_ && !kernel_->waitForBlocksInFlight(kAudioThreadTimeoutMs)) {
+        std::cerr << "TrackManager: the audio thread did not finish its block; leaking "
+                  << retired.instances.size() << " plugin instance(s) rather than freeing them under it" << std::endl;
+        retired = {};
+        return false;
+    }
+    for (void* instance : retired.instances) {
+        delete static_cast<Layer3::IPlugin*>(instance);
+    }
+    for (NodeID node : retired.insertNodes) {
+        DSP::InsertPluginFactory::getRegistry().deallocate(node);
+    }
+    retired = {};
+    return true;
 }
 
 void TrackManagerImpl::renameTrack(TrackID id, uint32_t newNameId) {
@@ -2326,6 +2383,13 @@ void TrackManagerImpl::insertTrackPluginInternal(TrackID id, uint32_t slotIndex,
                 pluginState->name[sizeof(pluginState->name) - 1] = '\0';
             }
             
+            // A plugin already in this slot is replaced: take it out before publishing the new one.
+            RetiredPlugins retired;
+            retireInsertPlugin(*slotNode, slotIndex, retired);
+            if (pluginsArray) {
+                retired.addInstance(pluginsArray[slotIndex].pluginInstance);
+            }
+
             std::atomic_thread_fence(std::memory_order_release);
             
             slotNode->slots[slotIndex] = pluginNodeId;
@@ -2341,6 +2405,7 @@ void TrackManagerImpl::insertTrackPluginInternal(TrackID id, uint32_t slotIndex,
                     plugState.name[sizeof(plugState.name) - 1] = '\0';
                 }
             }
+            freeAfterAudioThread(retired);
         }
     }
     if (mixerRoutingCallback_) mixerRoutingCallback_(id);
@@ -2421,25 +2486,18 @@ void TrackManagerImpl::removeTrackPluginInternal(TrackID id, uint32_t slotIndex)
     
     if (slotNode) {
         if (slotNode->slots[slotIndex].isValid()) {
-            NodeID pluginNodeId = slotNode->slots[slotIndex];
-            if (auto* pluginState = DSP::InsertPluginFactory::getRegistry().get(pluginNodeId)) {
-                void* oldInstance = pluginState->pluginInstance;
-                pluginState->pluginInstance = nullptr;
-                if (oldInstance) {
-                    delete static_cast<Layer3::IPlugin*>(oldInstance);
-                }
-            }
-            DSP::InsertPluginFactory::getRegistry().deallocate(pluginNodeId);
-            slotNode->slots[slotIndex] = NodeID::invalid();
-            slotNode->bypass[slotIndex] = false;
+            RetiredPlugins retired;
+            retireInsertPlugin(*slotNode, slotIndex, retired);
             
             if (pluginsArray) {
                 auto& plugState = pluginsArray[slotIndex];
+                retired.addInstance(plugState.pluginInstance);
                 plugState.pluginId = 0;
                 plugState.bypassed = false;
                 plugState.pluginInstance = nullptr;
                 std::memset(plugState.name, 0, sizeof(plugState.name));
             }
+            freeAfterAudioThread(retired);
         }
     }
     if (mixerRoutingCallback_) mixerRoutingCallback_(id);
@@ -2571,13 +2629,15 @@ void TrackManagerImpl::insertTrackInstrumentInternal(TrackID id, uint32_t plugin
     
     void* rawInstance = instance.release();
     
-    void* oldInstance = slotNode->pluginInstance;
-    slotNode->pluginInstance = nullptr;
-    if (oldInstance) {
-        delete static_cast<Layer3::IPlugin*>(oldInstance);
+    if (stateId != 0) {
+        const auto* stateBuffer = pluginStateCache_.getState(stateId);
+        if (stateBuffer) {
+            static_cast<Layer3::IPlugin*>(rawInstance)->loadState(stateBuffer->data(), stateBuffer->size());
+        }
     }
     
-    slotNode->reset();
+    // The slot is live: update its description in place rather than reset() it under the audio
+    // thread, then swap the fully prepared instance in.
     std::strncpy(slotNode->name, plugDesc.name, sizeof(slotNode->name) - 1);
     slotNode->name[sizeof(slotNode->name) - 1] = '\0';
     
@@ -2587,16 +2647,12 @@ void TrackManagerImpl::insertTrackInstrumentInternal(TrackID id, uint32_t plugin
     else if (plugDesc.formatFlags & PluginFormatFlags::CLAP) format = PluginFormat::CLAP;
     else if (plugDesc.formatFlags & PluginFormatFlags::BUILTIN) format = PluginFormat::BUILTIN;
     slotNode->pluginHandle = { plugDesc.pluginId, 1, format };
+    slotNode->bypass = false;
+    slotNode->bypassRamp.init(1.0f, 512);
     
-    if (stateId != 0) {
-        const auto* stateBuffer = pluginStateCache_.getState(stateId);
-        if (stateBuffer) {
-            static_cast<Layer3::IPlugin*>(rawInstance)->loadState(stateBuffer->data(), stateBuffer->size());
-        }
-    }
-    
-    std::atomic_thread_fence(std::memory_order_release);
-    slotNode->pluginInstance = rawInstance;
+    RetiredPlugins retired;
+    retired.addInstance(DSP::exchangePluginInstance(slotNode->pluginInstance, rawInstance));
+    retired.addInstance(it->second.instrument.pluginInstance);
     
     uint32_t latencySamples = 0;
     auto* plugin = static_cast<Layer3::IPlugin*>(rawInstance);
@@ -2620,6 +2676,7 @@ void TrackManagerImpl::insertTrackInstrumentInternal(TrackID id, uint32_t plugin
     std::strncpy(instState.name, plugDesc.name, sizeof(instState.name) - 1);
     instState.name[sizeof(instState.name) - 1] = '\0';
     
+    freeAfterAudioThread(retired);
     if (mixerRoutingCallback_) mixerRoutingCallback_(id);
 }
 
@@ -2661,12 +2718,14 @@ void TrackManagerImpl::removeTrackInstrumentInternal(TrackID id) {
     if (!desc.instrumentSlotNode.isValid()) return;
     
     if (auto* slotNode = DSP::getInstrumentSlotState(desc.instrumentSlotNode)) {
-        void* oldInstance = slotNode->pluginInstance;
-        slotNode->pluginInstance = nullptr;
-        if (oldInstance) {
-            delete static_cast<Layer3::IPlugin*>(oldInstance);
-        }
-        slotNode->reset();
+        RetiredPlugins retired;
+        retired.addInstance(DSP::exchangePluginInstance(slotNode->pluginInstance, nullptr));
+        retired.addInstance(it->second.instrument.pluginInstance);
+        // The slot is live: clear its description in place rather than reset() it under the audio thread.
+        slotNode->pluginHandle = PluginHandle::invalid();
+        std::memset(slotNode->name, 0, sizeof(slotNode->name));
+        slotNode->bypass = false;
+        slotNode->bypassRamp.init(1.0f, 512);
         
         if (desc.trackNode.isValid()) {
             if (auto* trk = DSP::AudioTrackFactory::getRegistry().get(desc.trackNode)) {
@@ -2681,6 +2740,7 @@ void TrackManagerImpl::removeTrackInstrumentInternal(TrackID id) {
         instState.bypassed = false;
         instState.pluginInstance = nullptr;
         std::memset(instState.name, 0, sizeof(instState.name));
+        freeAfterAudioThread(retired);
     }
     if (mixerRoutingCallback_) mixerRoutingCallback_(id);
 }
@@ -2749,14 +2809,10 @@ void TrackManagerImpl::completeTrackInstrumentInsertion(TrackID trackId, void* r
         return;
     }
 
+    RetiredPlugins retired;
     if (auto* slotNode = DSP::getInstrumentSlotState(desc.instrumentSlotNode)) {
-        void* oldInstance = slotNode->pluginInstance;
-        slotNode->pluginInstance = nullptr;
-        if (oldInstance) {
-            delete static_cast<Layer3::IPlugin*>(oldInstance);
-        }
-
-        slotNode->reset();
+        // The slot is live: update its description in place rather than reset() it under the audio
+        // thread, then swap the new instance in.
         std::strncpy(slotNode->name, plugDesc.name, sizeof(slotNode->name) - 1);
         slotNode->name[sizeof(slotNode->name) - 1] = '\0';
         
@@ -2766,9 +2822,10 @@ void TrackManagerImpl::completeTrackInstrumentInsertion(TrackID trackId, void* r
         else if (plugDesc.formatFlags & PluginFormatFlags::CLAP) format = PluginFormat::CLAP;
         else if (plugDesc.formatFlags & PluginFormatFlags::BUILTIN) format = PluginFormat::BUILTIN;
         slotNode->pluginHandle = { plugDesc.pluginId, 1, format };
+        slotNode->bypass = false;
+        slotNode->bypassRamp.init(1.0f, 512);
 
-        std::atomic_thread_fence(std::memory_order_release);
-        slotNode->pluginInstance = rawInstance; 
+        retired.addInstance(DSP::exchangePluginInstance(slotNode->pluginInstance, rawInstance));
 
         uint32_t latencySamples = 0;
         if (rawInstance) {
@@ -2790,11 +2847,15 @@ void TrackManagerImpl::completeTrackInstrumentInsertion(TrackID trackId, void* r
 
     // Update state cache
     auto& track = it->second;
+    if (track.instrument.pluginInstance != rawInstance) {
+        retired.addInstance(track.instrument.pluginInstance);
+    }
     track.instrument.pluginId = plugDesc.pluginId;
     track.instrument.bypassed = false;
     track.instrument.pluginInstance = rawInstance;
     std::strncpy(track.instrument.name, plugDesc.name, sizeof(track.instrument.name) - 1);
     track.instrument.name[sizeof(track.instrument.name) - 1] = '\0';
+    freeAfterAudioThread(retired);
 
     if (mixerRoutingCallback_) {
         mixerRoutingCallback_(trackId);
@@ -2855,6 +2916,13 @@ void TrackManagerImpl::completeTrackPluginInsertion(TrackID trackId, uint32_t sl
                 pluginState->name[sizeof(pluginState->name) - 1] = '\0';
             }
             
+            // A plugin already in this slot is replaced: take it out before publishing the new one.
+            RetiredPlugins retired;
+            retireInsertPlugin(*slotNode, slotIndex, retired);
+            if (pluginsArray) {
+                retired.addInstance(pluginsArray[slotIndex].pluginInstance);
+            }
+
             std::atomic_thread_fence(std::memory_order_release);
             
             slotNode->slots[slotIndex] = pluginNodeId;
@@ -2868,6 +2936,7 @@ void TrackManagerImpl::completeTrackPluginInsertion(TrackID trackId, uint32_t sl
                 std::strncpy(plugState.name, plugDesc.name, sizeof(plugState.name) - 1);
                 plugState.name[sizeof(plugState.name) - 1] = '\0';
             }
+            freeAfterAudioThread(retired);
         }
     } else {
         if (rawInstance) delete static_cast<Layer3::IPlugin*>(rawInstance);

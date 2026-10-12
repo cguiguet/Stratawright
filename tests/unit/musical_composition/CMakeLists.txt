@@ -10,6 +10,7 @@ add_executable(musical_composition_unit_tests
     plugin_state_serialization_test.cpp
     timeline_markers_calculations_test.cpp
     track_sidechain_test.cpp
+    plugin_teardown_test.cpp
 )
 
 target_include_directories(musical_composition_unit_tests PRIVATE

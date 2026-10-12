@@ -16,7 +16,7 @@
 
 namespace Layer2 { class IMutationBridge; }
 namespace Layer3 { class IPluginManager; }
-namespace DSP { class LatencyFactory; }
+namespace DSP { class LatencyFactory; struct PluginSlotState; }
 
 namespace Layer2 { class IEventQueue; }
 
@@ -264,6 +264,19 @@ private:
     std::vector<IPlaylist::RegionInfo> compilationScratch_;
     
     void syncRTSequencerList();
+
+    // Plugin instances and insert plugin nodes taken out of the audio graph, to free once no audio
+    // block can still be using them.
+    struct RetiredPlugins {
+        std::vector<void*> instances;
+        std::vector<NodeID> insertNodes;
+        void addInstance(void* instance);
+    };
+    // Takes the insert plugin in slotIndex (if any) out of the chain, into retired.
+    void retireInsertPlugin(DSP::PluginSlotState& slotNode, uint32_t slotIndex, RetiredPlugins& retired);
+    // Waits for the audio blocks in flight, then frees retired. Returns false, leaking them, if the
+    // audio thread did not finish its block in time.
+    bool freeAfterAudioThread(RetiredPlugins& retired);
     
     TrackID generateNextId();
     TrackID createTrackInternal(const TrackCreateInfo& info);

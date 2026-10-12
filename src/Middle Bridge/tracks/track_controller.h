@@ -87,6 +87,7 @@ public:
     std::vector<uint8_t> getPluginState(TrackID trackId, uint32_t slotIndex) const override;
     void setPluginState(TrackID trackId, uint32_t slotIndex, const std::vector<uint8_t>& state) override;
     void setPluginParameter(TrackID trackId, uint32_t slotIndex, uint32_t paramIndex, float value) override;
+    void setInstrumentParameter(TrackID trackId, uint32_t paramIndex, float value) override;
     uint32_t getPluginIdInSlot(TrackID trackId, uint32_t slotIndex) const override;
     uint32_t findPluginIdByName(std::string_view name) const override;
     bool openPluginEditor(TrackID trackId, uint32_t slotIndex, void* parentWindow, int& outWidth, int& outHeight) override;

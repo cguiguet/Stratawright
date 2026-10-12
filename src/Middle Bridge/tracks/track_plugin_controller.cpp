@@ -212,6 +212,20 @@ void TrackPluginController::setPluginState(TrackID trackId, uint32_t slotIndex, 
     }
 }
 
+void TrackPluginController::setInstrumentParameter(TrackID trackId, uint32_t paramIndex, float value) {
+    std::lock_guard<std::recursive_mutex> lock(ctx_.mutex);
+    auto* trackManager = ctx_.getTrackManager();
+    if (!trackManager) return;
+
+    auto desc = trackManager->getPipelineDescriptor(trackId);
+    if (!desc.instrumentSlotNode.isValid()) return;
+    if (auto* slotNode = DSP::getInstrumentSlotState(desc.instrumentSlotNode)) {
+        if (slotNode->pluginInstance) {
+            static_cast<Layer3::IPlugin*>(slotNode->pluginInstance)->setParameterValue(paramIndex, value);
+        }
+    }
+}
+
 void TrackPluginController::setPluginParameter(TrackID trackId, uint32_t slotIndex, uint32_t paramIndex, float value) {
     std::lock_guard<std::recursive_mutex> lock(ctx_.mutex);
     if (slotIndex >= 8) return;

@@ -237,7 +237,19 @@ daw-cli plugin add --track 1 --name "FabFilter Pro-Q 3" --slot 0
 - **Options**:
   - `--track <range>`
   - `--name "<exact_name>"` (Must match exact case returned by `plugin list`) or `--id <uint32>`
-  - `--slot <0..7>` (Default: 0)
+  - `--slot <0..7>`: insert slot of the effect chain. Omit it to load an **instrument** into a MIDI track's instrument slot.
+
+#### Built-in Instruments (GM Synth, GM Drums)
+Every installation has two General MIDI instruments (FORMAT `Built-in` in `plugin list`), so MIDI tracks can sound without third-party plugins:
+```bash
+daw-cli track create --name Bass --type midi --color blue
+daw-cli plugin add --track 2 --name "GM Synth"                     # instrument slot (no --slot)
+daw-cli plugin set-param --track 2 --plugin instrument --param 0 --val 0.2598  # program 33/127 = Fingered Bass
+daw-cli plugin add --track 3 --name "GM Drums"
+```
+- **GM Synth** parameter 0 is the GM program as `program / 127` (0 Acoustic Grand Piano, 4 Electric Piano 1, 24 Nylon Guitar, 25 Steel Guitar, 29 Overdriven Guitar, 30 Distortion Guitar, 32 Acoustic Bass, 33 Fingered Bass, 38 Synth Bass 1, 48 Strings, 52 Choir Aahs, 56 Trumpet, 61 Brass Section, 65 Alto Sax, 73 Flute, 80 Square Lead, 81 Saw Lead, 88 New Age Pad, 89 Warm Pad).
+- **GM Drums** parameter 0 is the kit as `kit / 127` (0 Standard, 8 Room, 16 Power, 24 Electronic, 25 TR-808, 32 Jazz, 40 Brush). Notes follow the GM percussion map: 35/36 kick, 37 side stick, 38/40 snare, 39 clap, 42 closed hi-hat, 44 pedal hi-hat, 46 open hi-hat, 41/43/45/47/48/50 toms (low to high), 49/57 crash, 51 ride, 53 ride bell, 54 tambourine, 56 cowbell.
+- Parameter 1 is the volume (0..1, default 0.7).
 
 #### Set Plugin Parameter Value
 ```bash

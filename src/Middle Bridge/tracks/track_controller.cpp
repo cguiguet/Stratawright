@@ -261,6 +261,9 @@ void TrackController::setPluginState(TrackID trackId, uint32_t slotIndex, const 
 void TrackController::setPluginParameter(TrackID trackId, uint32_t slotIndex, uint32_t paramIndex, float value) {
     plugin_->setPluginParameter(trackId, slotIndex, paramIndex, value);
 }
+void TrackController::setInstrumentParameter(TrackID trackId, uint32_t paramIndex, float value) {
+    plugin_->setInstrumentParameter(trackId, paramIndex, value);
+}
 uint32_t TrackController::getPluginIdInSlot(TrackID trackId, uint32_t slotIndex) const {
     return plugin_->getPluginIdInSlot(trackId, slotIndex);
 }

@@ -92,7 +92,8 @@ ExecutionResult PluginHandler::handleCommand(const ParsedArgs& args,
                 {"NAME", std::string(plug.name)},
                 {"VENDOR", plug.manufacturer[0] != '\0' ? std::string(plug.manufacturer) : "Generic"},
                 {"CATEGORY", plug.isInstrument() ? "Instrument" : "Effect"},
-                {"FORMAT", (plug.formatFlags & 0x01) ? "VST3" : ((plug.formatFlags & 0x02) ? "AU" : "CLAP")}
+                {"FORMAT", (plug.formatFlags & PluginFormatFlags::BUILTIN) ? "Built-in"
+                           : (plug.formatFlags & 0x01) ? "VST3" : ((plug.formatFlags & 0x02) ? "AU" : "CLAP")}
             });
         }
 
@@ -141,7 +142,26 @@ ExecutionResult PluginHandler::handleCommand(const ParsedArgs& args,
         uint32_t slotIdx = 0;
         std::string_view slotOpt = args.getOption("--slot");
         if (slotOpt.empty()) {
-            return ExecutionResult::Error(ErrorCode::INVALID_ARGS, "Missing required --slot argument.");
+            // Without --slot, an instrument goes into the track's instrument slot (MIDI tracks).
+            bool isInstrument = false;
+            for (const auto& plug : trackController->getAvailablePlugins()) {
+                if (plug.pluginId == resolvedPluginId) {
+                    isInstrument = plug.isInstrument();
+                    break;
+                }
+            }
+            if (!isInstrument) {
+                return ExecutionResult::Error(ErrorCode::INVALID_ARGS, "Missing required --slot argument (only instruments can omit it).");
+            }
+            for (uint32_t trkId : trackIds) {
+                trackController->insertInstrument(TrackID{trkId, 1}, resolvedPluginId);
+            }
+            return ExecutionResult::Success("PLUGIN_ADDED", {
+                {"track", std::string(trackStr)},
+                {"slot", "instrument"},
+                {"plugin_id", std::to_string(resolvedPluginId)},
+                {"plugin_name", pluginName}
+            });
         }
         auto parsedSlot = ParsedArgs::parseUint32(slotOpt);
         if (!parsedSlot || *parsedSlot >= 8) {
@@ -179,9 +199,10 @@ ExecutionResult PluginHandler::handleCommand(const ParsedArgs& args,
         if (slotStr.empty()) {
             return ExecutionResult::Error(ErrorCode::INVALID_ARGS, "Missing required --plugin or --slot argument.");
         }
-        auto slotOpt = ParsedArgs::parseUint32(slotStr);
+        const bool targetsInstrument = (slotStr == "instrument");
+        auto slotOpt = targetsInstrument ? std::optional<uint32_t>(0) : ParsedArgs::parseUint32(slotStr);
         if (!slotOpt || *slotOpt >= 8) {
-            return ExecutionResult::Error(ErrorCode::INVALID_ARGS, "Plugin slot index must be between 0 and 7.");
+            return ExecutionResult::Error(ErrorCode::INVALID_ARGS, "Plugin slot index must be between 0 and 7, or 'instrument'.");
         }
 
         std::string_view paramStr = args.getOption("--param");
@@ -208,11 +229,15 @@ ExecutionResult PluginHandler::handleCommand(const ParsedArgs& args,
             return ExecutionResult::Error(ErrorCode::INVALID_ARGS, "--val parameter value must be normalized between 0.0 and 1.0.");
         }
 
-        trackController->setPluginParameter(TrackID{*trackIdOpt, 1}, *slotOpt, *paramOpt, val);
+        if (targetsInstrument) {
+            trackController->setInstrumentParameter(TrackID{*trackIdOpt, 1}, *paramOpt, val);
+        } else {
+            trackController->setPluginParameter(TrackID{*trackIdOpt, 1}, *slotOpt, *paramOpt, val);
+        }
 
         return ExecutionResult::Success("PLUGIN_PARAM_UPDATED", {
             {"track", std::to_string(*trackIdOpt)},
-            {"slot", std::to_string(*slotOpt)},
+            {"slot", targetsInstrument ? std::string("instrument") : std::to_string(*slotOpt)},
             {"param_id", std::to_string(*paramOpt)},
             {"val", std::to_string(val)}
         });

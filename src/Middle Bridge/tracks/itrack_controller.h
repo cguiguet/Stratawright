@@ -327,6 +327,11 @@ public:
     virtual void setPluginParameter(TrackID trackId, uint32_t slotIndex, uint32_t paramIndex, float value) = 0;
 
     /**
+     * @brief Sets a parameter value on the loaded virtual instrument (normalized 0.0 to 1.0).
+     */
+    virtual void setInstrumentParameter(TrackID trackId, uint32_t paramIndex, float value) = 0;
+
+    /**
      * @brief Retrieves the pluginId loaded in the specified slot, or UINT32_MAX if empty.
      */
     virtual uint32_t getPluginIdInSlot(TrackID trackId, uint32_t slotIndex) const = 0;

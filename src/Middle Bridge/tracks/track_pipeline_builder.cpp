@@ -230,6 +230,9 @@ void AudioTrackPipelineBuilder::destroyPipeline(
   std::vector<std::shared_ptr<Layer3::IStreamingBuffer>> releasedBuffers;
   if (pipeline.sourceNode.isValid() && audioSequencerF_) {
     if (auto *s = audioSequencerF_->getRegistry().get(pipeline.sourceNode)) {
+      // Unregistered by buffer, which also drops the track mapping pointing at it: not by track id,
+      // which the next session's track may already hold (a session is destroyed after its
+      // replacement has loaded).
       for (uint32_t i = 0; i < MAX_BUFFERS_PER_TRACK; ++i) {
         if (s->buffers[i]) {
           if (butler_) {
@@ -244,9 +247,6 @@ void AudioTrackPipelineBuilder::destroyPipeline(
           std::move(it, buffers_.end(), std::back_inserter(releasedBuffers));
           buffers_.erase(it, buffers_.end());
         }
-      }
-      if (butler_) {
-        butler_->unregisterBufferForTrack(s->trackId.id);
       }
     }
     pushRemoveNodeMutation(DSP::NODE_TYPE_AUDIO_SEQUENCER, pipeline.sourceNode);

@@ -161,6 +161,8 @@ private:
      * Call after any mutation to startFrame, endFrame, zoomFactor, or verticalOffsetPx.
      */
     void applyViewport();
+    // Where the project dialogs start: the open project's folder, else ~/Music/Stratawright.
+    QString projectDirectory() const;
 
 public:
     /**

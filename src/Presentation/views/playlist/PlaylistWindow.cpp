@@ -40,6 +40,8 @@
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QMessageBox>
+#include <QFileInfo>
+#include <QStandardPaths>
 #include <QProgressDialog>
 #include <QRandomGenerator>
 #include <QColor>
@@ -1516,8 +1518,7 @@ void PlaylistWindow::onSaveProjectAs()
         return;
     }
     
-    QString defaultDir = QStringLiteral("./projects");
-    QDir().mkpath(defaultDir);
+    const QString defaultDir = projectDirectory();
 
     QString fileFilter = tr("%1 Project Files (*.ssproj *.strata *.agdaw *.adaw)").arg(QString::fromUtf8(config::PROJECT_DISPLAY_NAME.data(), static_cast<qsizetype>(config::PROJECT_DISPLAY_NAME.size())));
     QString selectedPath = QFileDialog::getSaveFileName(
@@ -1543,12 +1544,24 @@ void PlaylistWindow::onSaveProjectAs()
     }
 }
 
+QString PlaylistWindow::projectDirectory() const
+{
+    if (m_ctrl.lifecycle) {
+        const QString current = QString::fromStdString(m_ctrl.lifecycle->getCurrentProjectPath());
+        if (!current.isEmpty()) {
+            return QFileInfo(current).absolutePath();
+        }
+    }
+    const QString music = QStandardPaths::writableLocation(QStandardPaths::MusicLocation) + QStringLiteral("/Stratawright");
+    QDir().mkpath(music);
+    return music;
+}
+
 void PlaylistWindow::onOpenProject()
 {
     if (!m_ctrl.lifecycle) return;
 
-    QString defaultDir = QStringLiteral("./projects");
-    QDir().mkpath(defaultDir);
+    const QString defaultDir = projectDirectory();
 
     QString fileFilter = tr("%1 Project Files (*.ssproj *.strata *.agdaw *.adaw)").arg(QString::fromUtf8(config::PROJECT_DISPLAY_NAME.data(), static_cast<qsizetype>(config::PROJECT_DISPLAY_NAME.size())));
     QString selectedPath = QFileDialog::getOpenFileName(
@@ -1607,8 +1620,7 @@ void PlaylistWindow::onExportProjectJson()
         return;
     }
     
-    QString defaultDir = QStringLiteral("./projects");
-    QDir().mkpath(defaultDir);
+    const QString defaultDir = projectDirectory();
 
     QString fileFilter = tr("JSON Files (*.json)");
     QString selectedPath = QFileDialog::getSaveFileName(
@@ -1638,8 +1650,7 @@ void PlaylistWindow::onImportProjectJson()
 {
     if (!m_ctrl.lifecycle) return;
 
-    QString defaultDir = QStringLiteral("./projects");
-    QDir().mkpath(defaultDir);
+    const QString defaultDir = projectDirectory();
 
     QString fileFilter = tr("JSON Files (*.json)");
     QString selectedPath = QFileDialog::getOpenFileName(

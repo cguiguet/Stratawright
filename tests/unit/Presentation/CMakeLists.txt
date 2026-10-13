@@ -22,6 +22,7 @@ add_executable(presentation_unit_tests
 target_include_directories(presentation_unit_tests PRIVATE
     "${CMAKE_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/src/Middle Bridge"
+    "${CMAKE_SOURCE_DIR}/tests/unit"
 )
 
 target_link_libraries(presentation_unit_tests PRIVATE

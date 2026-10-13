@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "controller_stubs.h"
+#include "support/bridge_controller_stubs.h"
 #include "Presentation/views/chat/chat_references.h"
 #include "Presentation/views/chat/mic_recorder.h"
 

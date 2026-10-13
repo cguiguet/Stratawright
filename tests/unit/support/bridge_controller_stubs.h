@@ -1,6 +1,6 @@
-// tests/unit/Presentation/controller_stubs.h
+// tests/unit/support/bridge_controller_stubs.h
 //
-// Do-nothing implementations of the bridge controllers the chat panel uses, generated from their
+// Do-nothing implementations of bridge controllers, generated from their
 // interfaces: tests derive from them and override only what they look at.
 #pragma once
 

@@ -547,6 +547,74 @@ ExecutionResult ClipHandler::handleCommand(
             });
         }
 
+        // ── Clip Duplicate ──────────────────────────────────────────────────
+        // Copies a clip end to end after itself: --count N copies, or as many as fit before
+        // --until (a bar.beat.tick position, excluded), the last one cut to fit.
+        if (sub == "duplicate") {
+            std::string_view trackStr = args.getOption("--track");
+            std::string_view clipStr = args.getOption("--clip");
+            std::string_view untilStr = args.getOption("--until");
+            std::string_view countStr = args.getOption("--count");
+            if (trackStr.empty() || clipStr.empty() || (untilStr.empty() == countStr.empty())) {
+                return ExecutionResult::Error(ErrorCode::INVALID_ARGS,
+                    "Usage: clip duplicate --track N --clip C (--until <bar.beat.tick> | --count N).");
+            }
+            auto clipOpt = ParsedArgs::parseUint32(clipStr);
+            if (!clipOpt) {
+                return ExecutionResult::Error(ErrorCode::INVALID_ARGS, "Invalid numeric format for --clip.");
+            }
+            const composition::RegionID original{*clipOpt, 0};
+            bridge::VisualRegion clip{};
+            if (!arrangementController->getVisualRegion(original, clip) || clip.durationFrames == 0) {
+                return ExecutionResult::Error(ErrorCode::ENTITY_NOT_FOUND,
+                    "Target clip ID " + std::string(clipStr) + " not found on timeline.");
+            }
+            if (clip.clipType != composition::RegionType::AUDIO && clip.clipType != composition::RegionType::MIDI) {
+                return ExecutionResult::Error(ErrorCode::INVALID_ARGS, "Only audio and MIDI clips can be duplicated.");
+            }
+
+            constexpr uint32_t kMaxCopies = 256;
+            uint32_t count = kMaxCopies;
+            uint64_t until = UINT64_MAX;
+            if (!countStr.empty()) {
+                auto countOpt = ParsedArgs::parseUint32(countStr);
+                if (!countOpt || *countOpt == 0 || *countOpt > kMaxCopies) {
+                    return ExecutionResult::Error(ErrorCode::INVALID_ARGS, "--count must be between 1 and 256.");
+                }
+                count = *countOpt;
+            } else {
+                until = parsePositionToFrames(untilStr, timelineController);
+                if (until <= clip.startFrame + clip.durationFrames) {
+                    return ExecutionResult::Error(ErrorCode::INVALID_ARGS,
+                        "--until must be after the end of the clip (positions are bar.beat.tick, e.g. 17.1.0).");
+                }
+            }
+
+            std::string created;
+            uint64_t position = clip.startFrame + clip.durationFrames;
+            for (uint32_t made = 0; made < count && position < until; ++made) {
+                const composition::RegionID copy = clip.clipType == composition::RegionType::AUDIO
+                    ? arrangementController->duplicateAudioRegion(original, position)
+                    : arrangementController->duplicateMidiRegion(original, position);
+                if (!copy.isValid()) {
+                    return ExecutionResult::Error(ErrorCode::INVALID_ARGS, "Could not duplicate clip " + std::string(clipStr) + ".");
+                }
+                if (position + clip.durationFrames > until) {
+                    bridge::VisualRegion last{};
+                    arrangementController->getVisualRegion(copy, last);
+                    arrangementController->trimRegion(copy, position, last.fileOffsetFrames, until - position);
+                }
+                created += (created.empty() ? "" : ",") + std::to_string(copy.id);
+                position += clip.durationFrames;
+            }
+
+            return ExecutionResult::Success("CLIP_DUPLICATED", {
+                {"track", std::string(trackStr)},
+                {"clip", std::string(clipStr)},
+                {"copies", created}
+            });
+        }
+
         // ── Clip Move ───────────────────────────────────────────────────────
         if (sub == "move") {
             std::string_view trackStr = args.getOption("--track");

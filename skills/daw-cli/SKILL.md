@@ -385,6 +385,15 @@ daw-cli clip move --track 1 --clip 1 --to-pos 3.1.0 [--to-track 2]
 - **Success Symbol**: `CLIP_MOVED`
 - **Options**: `--track <uint32>`, `--clip <uint32>`, `--to-pos <BBT>`, `--to-track <uint32>`
 
+#### Duplicate Clip
+```bash
+daw-cli clip duplicate --track 1 --clip 1 --until 17.1.0   # repeat through bar 16
+daw-cli clip duplicate --track 1 --clip 1 --count 3        # three copies
+```
+- **Success Symbol**: `CLIP_DUPLICATED` (`copies`: ids of the new clips)
+- **Options**: `--track <uint32>`, `--clip <uint32>`, and either `--until <BBT>` (excluded: copies end to end after the clip until there, the last one cut to fit) or `--count <1-256>`
+- Audio and MIDI clips. A MIDI copy gets its own notes, controllers and pitch bends: editing one copy leaves the others alone.
+
 #### Nudge Clip Position
 ```bash
 daw-cli clip nudge --track 1 --clip 1 --by +1/16

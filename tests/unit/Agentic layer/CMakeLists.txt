@@ -5,11 +5,14 @@ cmake_minimum_required(VERSION 3.20)
 add_executable(agentic_layer_unit_tests
     analysis_handler_test.cpp
     rendering_handler_test.cpp
+    clip_duplicate_test.cpp
 )
 
 target_include_directories(agentic_layer_unit_tests PRIVATE
     "${CMAKE_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/src/Agentic layer"
+    "${CMAKE_SOURCE_DIR}/src/Middle Bridge"
+    "${CMAKE_SOURCE_DIR}/tests/unit"
 )
 
 target_link_libraries(agentic_layer_unit_tests PRIVATE

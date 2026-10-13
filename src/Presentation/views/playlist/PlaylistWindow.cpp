@@ -42,6 +42,7 @@
 #include <QMessageBox>
 #include <QFileInfo>
 #include <QStandardPaths>
+#include <cstring>
 #include <QProgressDialog>
 #include <QRandomGenerator>
 #include <QColor>
@@ -629,15 +630,7 @@ void PlaylistWindow::installKeyboardShortcuts()
     sm.bind(this, ShortcutAction::Playlist_SelectAll, [this]() {
         if (m_canvas) m_canvas->selectAll();
     });
-    sm.bind(this, ShortcutAction::Global_SaveProject, [this]() {
-        onSaveProject();
-    });
-    sm.bind(this, ShortcutAction::Global_SaveProjectAs, [this]() {
-        onSaveProjectAs();
-    });
-    sm.bind(this, ShortcutAction::Global_OpenProject, [this]() {
-        onOpenProject();
-    });
+    // New, Open, Save and Save As are on the File menu (MainWindow), with their shortcuts.
     sm.bind(this, ShortcutAction::Playlist_OpenExportDialog, [this]() {
         openExportDialog(0);
     });
@@ -1557,9 +1550,47 @@ QString PlaylistWindow::projectDirectory() const
     return music;
 }
 
+bool PlaylistWindow::confirmDiscardChanges()
+{
+    if (!m_ctrl.lifecycle || !m_ctrl.lifecycle->isProjectDirty()) {
+        return true;
+    }
+    const QString path = QString::fromStdString(m_ctrl.lifecycle->getCurrentProjectPath());
+    const QString name = path.isEmpty() ? tr("Untitled project") : QFileInfo(path).completeBaseName();
+    const auto answer = QMessageBox::question(this, tr("Unsaved changes"),
+        tr("Save the changes to \"%1\" first?").arg(name),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
+    if (answer == QMessageBox::Cancel) {
+        return false;
+    }
+    if (answer == QMessageBox::Save) {
+        onSaveProject();
+        // Saving an untitled project goes through Save As, which the user may cancel.
+        return !QString::fromStdString(m_ctrl.lifecycle->getCurrentProjectPath()).isEmpty();
+    }
+    return true;
+}
+
+void PlaylistWindow::onNewProject()
+{
+    if (!m_ctrl.lifecycle || !confirmDiscardChanges()) {
+        return;
+    }
+    bridge::ProjectMetadataState metadata{};
+    std::strcpy(metadata.projectName, "Untitled Project");
+    std::strcpy(metadata.author, "DAW User");
+    metadata.sampleRate = m_ctrl.lifecycle->getCurrentProjectMetadata().sampleRate;  // the engine's anyway
+    metadata.initialTempoBPM = 120.0f;
+    metadata.timeSignatureNumerator = 4;
+    metadata.timeSignatureDenominator = 4;
+    if (!m_ctrl.lifecycle->createNewProject(metadata)) {
+        QMessageBox::critical(this, tr("New Project Error"), tr("Could not start a new project."));
+    }
+}
+
 void PlaylistWindow::onOpenProject()
 {
-    if (!m_ctrl.lifecycle) return;
+    if (!m_ctrl.lifecycle || !confirmDiscardChanges()) return;
 
     const QString defaultDir = projectDirectory();
 

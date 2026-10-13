@@ -90,6 +90,8 @@ private Q_SLOTS:
      * @brief Opens the custom premium Hardware Settings Dialog modal.
      */
     void showSettingsDialog();
+    // File menu (New, Open, Save, Save As) in the menu bar, with their shortcuts.
+    void buildFileMenu();
 
     /**
      * @brief Handles double clicks on MIDI clips from the Playlist.

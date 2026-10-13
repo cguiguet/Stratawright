@@ -19,6 +19,7 @@ enum class ShortcutAction : uint16_t {
     Global_SaveProject,         // Ctrl+S
     Global_SaveProjectAs,       // Ctrl+Shift+S
     Global_OpenProject,         // Ctrl+O
+    Global_NewProject,          // Ctrl+N
     Global_Undo,                // Ctrl+Z
     Global_Redo,                // Ctrl+Shift+Z / Ctrl+Y
 

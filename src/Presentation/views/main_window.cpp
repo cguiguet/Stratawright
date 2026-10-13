@@ -10,6 +10,10 @@
 #include "chat/chat_panel.h"
 #include "relaunch.h"
 #include "../shortcuts/ShortcutManager.h"
+#include "../shortcuts/ShortcutRegistry.h"
+#include <QAction>
+#include <QMenu>
+#include <QMenuBar>
 #include <QDockWidget>
 #include <QShortcut>
 #include <QLineEdit>
@@ -182,6 +186,8 @@ MainWindow::MainWindow(QWidget* parent)
     // 4. Register MixerWindow for 60Hz updates in director
     m_director.setMixerWindow(m_mixerWindow);
 
+    buildFileMenu();
+
     // 5. Spin up 60Hz centralized GUI telemetry loop
     m_director.start();
 }
@@ -347,6 +353,25 @@ void MainWindow::paintEvent(QPaintEvent* event) {
     // Draw simple subtle horizontal faceplate vectors at the margins
     painter.drawLine(0, 1, width(), 1);
     painter.drawLine(0, height() - 1, width(), height() - 1);
+}
+
+void MainWindow::buildFileMenu() {
+    using shortcuts::ShortcutAction;
+    QMenu* file = menuBar()->addMenu(tr("File"));
+    const auto add = [this, file](const QString& text, ShortcutAction shortcut, void (PlaylistWindow::*command)()) {
+        QAction* action = file->addAction(text);
+        action->setShortcut(shortcuts::ShortcutRegistry::instance().getSequence(shortcut));
+        connect(action, &QAction::triggered, this, [this, command]() {
+            if (m_playlistWindow) {
+                (m_playlistWindow->*command)();
+            }
+        });
+    };
+    add(tr("New Project"), ShortcutAction::Global_NewProject, &PlaylistWindow::onNewProject);
+    add(tr("Open Project…"), ShortcutAction::Global_OpenProject, &PlaylistWindow::onOpenProject);
+    file->addSeparator();
+    add(tr("Save Project"), ShortcutAction::Global_SaveProject, &PlaylistWindow::onSaveProject);
+    add(tr("Save Project As…"), ShortcutAction::Global_SaveProjectAs, &PlaylistWindow::onSaveProjectAs);
 }
 
 void MainWindow::showSettingsDialog() {

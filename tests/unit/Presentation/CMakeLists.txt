@@ -9,6 +9,7 @@ add_executable(presentation_unit_tests
     item_view_accessibility_test.cpp
     claude_settings_test.cpp
     mic_recorder_test.cpp
+    shortcut_registry_test.cpp
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/updates/upstream_pull_requests.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_stream.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/conversation_store.cpp"
@@ -17,6 +18,7 @@ add_executable(presentation_unit_tests
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_account.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/chat_references.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/mic_recorder.cpp"
+    "${CMAKE_SOURCE_DIR}/src/Presentation/shortcuts/ShortcutRegistry.cpp"
 )
 
 target_include_directories(presentation_unit_tests PRIVATE

@@ -161,6 +161,8 @@ private:
      * Call after any mutation to startFrame, endFrame, zoomFactor, or verticalOffsetPx.
      */
     void applyViewport();
+    // Offers to save unsaved changes; false if the user cancels (or saving fails).
+    bool confirmDiscardChanges();
     // Where the project dialogs start: the open project's folder, else ~/Music/Stratawright.
     QString projectDirectory() const;
 
@@ -172,6 +174,13 @@ public:
     void reloadTracks();
     int getMaxVerticalOffset() const;
     void onAnalyzeLoudnessRequested();
+
+    // File menu: start an empty project, open one, save. New and Open first ask what to do with
+    // unsaved changes.
+    void onNewProject();
+    void onOpenProject();
+    void onSaveProject();
+    void onSaveProjectAs();
 
 private slots:
     // ---------------------------------------------------------------------------
@@ -229,9 +238,6 @@ private slots:
     void onViewportVerticalScrolled(int offsetPx);
     void onTempoCollapseToggled(bool collapsed);
     void onTempoHeightResizeRequested(int newHeight);
-    void onSaveProject();
-    void onSaveProjectAs();
-    void onOpenProject();
     void onExportProjectJson();
     void onImportProjectJson();
 

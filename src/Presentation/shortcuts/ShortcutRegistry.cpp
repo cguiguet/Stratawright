@@ -4,7 +4,7 @@ namespace presentation::shortcuts {
 
 namespace {
 
-constexpr std::array<ShortcutInfo, 38> kDefaultShortcutTable = {{
+constexpr std::array<ShortcutInfo, 39> kDefaultShortcutTable = {{
     // Global Navigation & Commands
     { ShortcutAction::Global_ToggleArrangement,   ShortcutCategory::Global, "global.view.arrangement",   "Focus Arrangement",   "Toggle Arrangement Window visibility", "F5" },
     { ShortcutAction::Global_TogglePianoRoll,     ShortcutCategory::Global, "global.view.pianoroll",     "Focus Piano Roll",   "Toggle Piano Roll Window visibility",   "F7" },
@@ -13,6 +13,7 @@ constexpr std::array<ShortcutInfo, 38> kDefaultShortcutTable = {{
     { ShortcutAction::Global_SaveProject,         ShortcutCategory::Global, "global.project.save",       "Save Project",       "Save active project to disk",           "Ctrl+S" },
     { ShortcutAction::Global_SaveProjectAs,       ShortcutCategory::Global, "global.project.save_as",    "Save Project As",    "Save project under a new path",         "Ctrl+Shift+S" },
     { ShortcutAction::Global_OpenProject,         ShortcutCategory::Global, "global.project.open",       "Open Project",       "Open existing project file",            "Ctrl+O" },
+    { ShortcutAction::Global_NewProject,          ShortcutCategory::Global, "global.project.new",        "New Project",        "Start a new empty project",             "Ctrl+N" },
     { ShortcutAction::Global_Undo,                ShortcutCategory::Global, "global.edit.undo",          "Undo",               "Undo last action",                      "Ctrl+Z" },
     { ShortcutAction::Global_Redo,                ShortcutCategory::Global, "global.edit.redo",          "Redo",               "Redo last undone action",               "Ctrl+Shift+Z" },
 

@@ -104,7 +104,15 @@ public:
     return buffers_;
   }
 
+  // Buffers of tracks never destroyed one by one (their session was dropped) leave the butler
+  // before they are freed.
+  ~AudioTrackPipelineBuilder() override;
+
 private:
+  // Frees the buffers once neither the butler nor the audio thread can still be using them
+  // (leaks them if one of them is stuck).
+  void releaseBuffers(std::vector<std::shared_ptr<Layer3::IStreamingBuffer>> buffers, IDSPKernel *kernel);
+
   DSP::AudioSequencerFactory *audioSequencerF_;
   DSP::AudioTrackFactory *audioTrackF_;
   Layer1::IFileSystem *fs_;

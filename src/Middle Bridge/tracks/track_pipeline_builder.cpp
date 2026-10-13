@@ -264,12 +264,31 @@ void AudioTrackPipelineBuilder::destroyPipeline(
   }
 
   TrackPipelineBuilderBase::destroyPipeline(pipeline, kernel);
+  releaseBuffers(std::move(releasedBuffers), kernel);
+}
 
-  if (!releasedBuffers.empty() && kernel && !kernel->waitForBlocksInFlight(500)) {
-    // The audio thread did not finish its block: leak the buffers rather than free them under it.
-    static std::vector<std::shared_ptr<Layer3::IStreamingBuffer>> leakedBuffers;
-    std::move(releasedBuffers.begin(), releasedBuffers.end(), std::back_inserter(leakedBuffers));
+void AudioTrackPipelineBuilder::releaseBuffers(std::vector<std::shared_ptr<Layer3::IStreamingBuffer>> buffers,
+                                               IDSPKernel *kernel) {
+  if (buffers.empty()) {
+    return;
   }
+  const bool butlerDone = !butler_ || butler_->waitForCycleInFlight(500);
+  const bool audioDone = !kernel || kernel->waitForBlocksInFlight(500);
+  if (!butlerDone || !audioDone) {
+    // A thread did not finish its cycle: leak the buffers rather than free them under it.
+    static std::vector<std::shared_ptr<Layer3::IStreamingBuffer>> leakedBuffers;
+    std::move(buffers.begin(), buffers.end(), std::back_inserter(leakedBuffers));
+  }
+}
+
+AudioTrackPipelineBuilder::~AudioTrackPipelineBuilder() {
+  if (butler_) {
+    for (const auto &buffer : buffers_) {
+      butler_->unregisterBuffer(buffer.get());
+    }
+  }
+  // The audio stream is stopped while a session is replaced or the app shuts down.
+  releaseBuffers(std::move(buffers_), nullptr);
 }
 
 // ============================================================================

@@ -1,5 +1,6 @@
 #include "butler_thread_impl.h"
 #include <algorithm>
+#include <chrono>
 #include <unordered_set>
 #include "../Hardware/OS abstraction/threading/ithread_manager.h"
 
@@ -128,6 +129,19 @@ void ButlerThreadImpl::scheduleTask(std::function<void()> task) {
     wakeButler();
 }
 
+bool ButlerThreadImpl::waitForCycleInFlight(uint32_t timeoutMs) {
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    const uint64_t started = cyclesStarted_.load(std::memory_order_seq_cst);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+    while (cyclesFinished_.load(std::memory_order_acquire) < started) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
+    return true;
+}
+
 uint32_t ButlerThreadImpl::getPendingBufferCount() const {
     // RT-safe: atomic read of pending refill count
     return pendingCount.load(std::memory_order_relaxed);
@@ -155,6 +169,13 @@ void ButlerThreadImpl::threadLoop() {
         if (!isRunning.load(std::memory_order_relaxed)) break;
 
         state.store(ButlerState::WORKING, std::memory_order_relaxed);
+        // Counted so that a buffer being dropped can wait for this cycle before it is freed: the
+        // cycle copies buffer pointers and uses them without holding any lock.
+        cyclesStarted_.fetch_add(1, std::memory_order_seq_cst);
+        struct CycleFinished {
+            std::atomic<uint64_t>& counter;
+            ~CycleFinished() { counter.fetch_add(1, std::memory_order_release); }
+        } cycleFinished{cyclesFinished_};
 
         // 1. Load active playback transport state and snapshot atomically
         uint64_t currentTransportPos = transportPos_.load(std::memory_order_acquire);

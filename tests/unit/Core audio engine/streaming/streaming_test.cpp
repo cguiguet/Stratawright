@@ -326,3 +326,70 @@ TEST_CASE("Disk Streaming: Resampling (48kHz File to 44.1kHz Project)", "[Layer3
     butler->stop();
 }
 
+
+namespace {
+
+// A buffer whose refill holds the butler's cycle until the test releases it.
+struct HoldingBuffer : Layer3::IStreamingBuffer {
+    std::atomic<bool> entered{false};
+    std::atomic<bool> released{true};
+    std::atomic<bool> refilled{false};
+
+    void refillAsync(uint64_t, Layer1::IFileSystem*) override {
+        entered = true;
+        while (!released) {
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
+        }
+        refilled = true;
+    }
+    const float* const* getRTBuffer(uint64_t) override { return nullptr; }
+    void requestRefill(uint64_t) override {}
+    void provideRecordedData(const float*, uint32_t) override {}
+    void associateFile(Layer1::FileHandle) override {}
+    void setTimelineOffset(uint64_t, uint64_t) override {}
+    void setPlaybackRatio(float) override {}
+    void flushAsync() override {}
+    uint64_t getReadPosition() const override { return 0; }
+    BufferState getState() const override { return BufferState::READY; }
+    uint32_t getAvailableFrames() const override { return 0; }
+    uint32_t getTotalCapacity() const override { return 0; }
+    uint32_t getNumChannels() const override { return 1; }
+    void setBufferSize(uint32_t) override {}
+    void setReadAheadSize(uint32_t) override {}
+    void setSampleRate(uint32_t) override {}
+    uint32_t getSampleRate() const override { return 48000; }
+};
+
+} // namespace
+
+TEST_CASE("Butler: waiting for the refill cycle in flight", "[Layer3][Streaming]") {
+    auto butler = Layer3::IButlerThread::create();
+    REQUIRE(butler);
+    REQUIRE(butler->start());
+
+    // Nothing running: returns at once.
+    CHECK(butler->waitForCycleInFlight(0));
+
+    HoldingBuffer buffer;
+    buffer.released = false;
+    REQUIRE(butler->registerBuffer(&buffer));
+    butler->wakeButler();
+    for (int i = 0; i < 2000 && !buffer.entered; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    REQUIRE(buffer.entered);
+
+    // Unregistered, but the cycle that copied it is still using it: not yet safe to free.
+    butler->unregisterBuffer(&buffer);
+    CHECK_FALSE(butler->waitForCycleInFlight(20));
+    CHECK_FALSE(buffer.refilled);
+
+    std::thread releaser([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        buffer.released = true;
+    });
+    CHECK(butler->waitForCycleInFlight(2000));
+    CHECK(buffer.refilled);
+    releaser.join();
+    butler->stop();
+}

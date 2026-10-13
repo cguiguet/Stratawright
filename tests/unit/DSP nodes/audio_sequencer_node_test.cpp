@@ -61,6 +61,7 @@ public:
 
 class MockButlerThread : public Layer3::IButlerThread {
 public:
+    bool waitForCycleInFlight(uint32_t) override { return true; }
     Layer3::IStreamingBuffer* mappedBuffer = nullptr;
     uint32_t mappedSourceId = 0;
 

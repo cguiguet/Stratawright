@@ -218,6 +218,11 @@ public:
     // Thread-safety: NOT RT-safe
     virtual bool unregisterBuffer(IStreamingBuffer* buffer) = 0;
 
+    // Waits until the refill cycle running when this was called (if any) has finished: a buffer
+    // unregistered beforehand is then no longer used by the butler and can be freed. Returns false
+    // if the cycle did not finish within timeoutMs. Never call it from the butler thread.
+    virtual bool waitForCycleInFlight(uint32_t timeoutMs) = 0;
+
     // Track-to-Buffer mapping registry (for look-ahead matching)
     virtual bool registerBufferForTrack(uint32_t trackId, IStreamingBuffer* buffer) = 0;
     virtual bool unregisterBufferForTrack(uint32_t trackId) = 0;

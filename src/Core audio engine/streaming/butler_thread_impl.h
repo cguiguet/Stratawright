@@ -51,6 +51,7 @@ public:
     void scheduleTask(std::function<void()> task) override;
 
     ButlerState getState() const override { return state.load(std::memory_order_relaxed); }
+    bool waitForCycleInFlight(uint32_t timeoutMs) override;
     uint32_t getPendingBufferCount() const override;
 
 private:
@@ -60,6 +61,9 @@ private:
     std::atomic<bool> isRunning;
     std::atomic<ButlerState> state;
     std::atomic<uint32_t> pendingCount;  // Tracks pending refills
+    // Refill cycles started and finished, for waitForCycleInFlight.
+    std::atomic<uint64_t> cyclesStarted_{0};
+    std::atomic<uint64_t> cyclesFinished_{0};
     Layer1::WorkgroupHandle workgroupHandle_{Layer1::WorkgroupHandle::invalid()};
 
     std::vector<IStreamingBuffer*> registeredBuffers;

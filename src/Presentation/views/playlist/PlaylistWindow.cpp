@@ -44,6 +44,7 @@
 #include <QRandomGenerator>
 #include <QColor>
 #include "dialogs/DAWInputDialog.h"
+#include "Presentation/views/chat/chat_references.h"
 
 namespace presentation::views {
 
@@ -1968,17 +1969,8 @@ QString PlaylistWindow::describeSelectionForChat() const {
             return a.trackId.id != b.trackId.id ? a.trackId.id < b.trackId.id : a.startFrame < b.startFrame;
         });
         for (const auto& clip : clips) {
-            const bool audio = clip.clipType == composition::RegionType::AUDIO;
-            const bool midi = clip.clipType == composition::RegionType::MIDI;
-            QString kind = audio ? QStringLiteral("audio") : midi ? QStringLiteral("MIDI") : QStringLiteral("automation");
-            if (audio && clip.name[0] != '\0') {
-                kind += QStringLiteral(" \"%1\"").arg(QString::fromUtf8(clip.name));
-            }
-            lines << QStringLiteral("@clip %1 · %2 · track %3 \"%4\" · bars %5 → %6")
-                         .arg(clip.id.id)
-                         .arg(kind)
-                         .arg(clip.trackId.id)
-                         .arg(trackName(clip.trackId), bars(clip.startFrame), bars(clip.startFrame + clip.durationFrames));
+            lines << presentation::chat::clipReference(clip, trackName(clip.trackId), bars(clip.startFrame),
+                                                       bars(clip.startFrame + clip.durationFrames));
         }
     }
 

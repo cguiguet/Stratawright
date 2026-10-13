@@ -14,6 +14,7 @@ add_library(layer7_views STATIC
     chat/assistant_instructions.cpp
     chat/chat_panel.cpp
     chat/conversation_store.cpp
+    chat/chat_references.cpp
     relaunch.cpp
     item_view_accessibility.cpp
     mixer/base_tactile_control.cpp

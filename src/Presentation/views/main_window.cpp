@@ -274,6 +274,7 @@ void MainWindow::setPlaylistControllers(const PlaylistWindow::Controllers& playl
     m_arrangementController = playlistCtrls.arrangement;
     m_lifecycleController = playlistCtrls.lifecycle;
     m_chatPanel->setProjectContext(playlistCtrls.lifecycle, playlistCtrls.sessionManager);
+    m_chatPanel->setRecordingContext({playlistCtrls.track, playlistCtrls.timeline, playlistCtrls.arrangement, m_hardwareSettingsFacade});
 
     m_playlistWindow = new PlaylistWindow(playlistCtrls, this);
     m_mainSplitter->insertWidget(0, m_playlistWindow);

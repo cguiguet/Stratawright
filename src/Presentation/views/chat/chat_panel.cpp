@@ -156,7 +156,7 @@ ChatPanel::ChatPanel(QWidget* parent) : QWidget(parent) {
         "(\"the mixer crashes when...\"). It runs with your Claude Code login."));
 
     input_ = new QPlainTextEdit(this);
-    input_->setPlaceholderText(QStringLiteral("Message Claude… (Enter to send, Shift+Enter for a new line)"));
+    input_->setPlaceholderText(QStringLiteral("Message Claude… (Enter to send, Shift+Enter for a new line, /mic to record)"));
     input_->setFixedHeight(72);
     input_->installEventFilter(this);
 
@@ -196,7 +196,29 @@ ChatPanel::ChatPanel(QWidget* parent) : QWidget(parent) {
     layout->addWidget(statusLabel_);
 
     connect(sendButton_, &QPushButton::clicked, this, &ChatPanel::sendInput);
-    connect(stopButton_, &QPushButton::clicked, session_, &ClaudeCodeSession::stop);
+    connect(stopButton_, &QPushButton::clicked, this, [this]() {
+        if (mic_->isRecording()) {
+            mic_->stop();
+        } else {
+            session_->stop();
+        }
+    });
+    mic_ = new MicRecorder(this);
+    connect(mic_, &MicRecorder::started, this, [this](const QString& description) {
+        appendNote(QStringLiteral("🎤 ") + description);
+        statusLabel_->setText(QStringLiteral("Recording…"));
+        updateStopButton();
+    });
+    connect(mic_, &MicRecorder::finished, this, [this](const QString& reference, const QString& description) {
+        updateStopButton();
+        statusLabel_->setText(description);
+        if (reference.isEmpty()) {
+            appendNote(QStringLiteral("🎤 ") + description);
+            return;
+        }
+        appendNote(QStringLiteral("🎤 %1 Say what to make of it, e.g. \"a rock drum beat from this rhythm\".").arg(description));
+        insertReference(reference);
+    });
     connect(newButton, &QPushButton::clicked, this, [this]() {
         session_->newConversation();
         transcript_->clear();
@@ -491,8 +513,18 @@ bool ChatPanel::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
 }
 
+void ChatPanel::setRecordingContext(const MicRecorder::Controllers& controllers) {
+    mic_->setControllers(controllers);
+}
+
 void ChatPanel::sendInput() {
     const QString text = input_->toPlainText().trimmed();
+    // Panel commands work even while Claude is busy (a second /mic stops the take).
+    if (text == QStringLiteral("/mic") || text.startsWith(QStringLiteral("/mic "))) {
+        input_->clear();
+        handleMicCommand(text.mid(4).trimmed());
+        return;
+    }
     if (text.isEmpty() || session_->isBusy()) {
         return;
     }
@@ -545,9 +577,72 @@ void ChatPanel::onStreamEvent(const StreamEvent& event) {
     }
 }
 
+void ChatPanel::handleMicCommand(const QString& argument) {
+    if (mic_->isRecording()) {
+        mic_->stop();
+        return;
+    }
+    const std::vector<MicRecorder::Input> inputs = mic_->inputs();
+    if (inputs.empty()) {
+        appendNote(QStringLiteral("🎤 No audio input: connect your sound card, or pick it in Settings."));
+        return;
+    }
+    if (!argument.isEmpty()) {
+        bool ok = false;
+        const uint32_t number = argument.toUInt(&ok);
+        for (const auto& input : inputs) {
+            if (ok && input.channel + 1 == number) {
+                startMic(input);
+                return;
+            }
+        }
+        appendNote(QStringLiteral("🎤 No input %1 here: type /mic to choose.").arg(argument));
+        return;
+    }
+    // Which input: the menu remembers the last one.
+    const uint32_t last = QSettings(QStringLiteral("Stratawright"), QStringLiteral("Stratawright"))
+                              .value(QStringLiteral("chat/micInput"), 0).toUInt();
+    auto* menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->addSection(QStringLiteral("Record from"));
+    for (const auto& input : inputs) {
+        QAction* action = menu->addAction(input.label);
+        action->setCheckable(true);
+        action->setChecked(input.channel == last);
+        connect(action, &QAction::triggered, this, [this, input]() { startMic(input); });
+    }
+    menu->popup(input_->mapToGlobal(QPoint(0, input_->height())));
+}
+
+void ChatPanel::startMic(const MicRecorder::Input& input) {
+    QSettings(QStringLiteral("Stratawright"), QStringLiteral("Stratawright"))
+        .setValue(QStringLiteral("chat/micInput"), input.channel);
+    const QString problem = mic_->start(input);
+    if (!problem.isEmpty()) {
+        appendNote(QStringLiteral("🎤 ") + problem);
+    }
+}
+
+void ChatPanel::updateStopButton() {
+    stopButton_->setEnabled(session_->isBusy() || mic_->isRecording());
+}
+
+void ChatPanel::appendNote(const QString& text) {
+    QTextCursor cursor(transcript_->document());
+    cursor.movePosition(QTextCursor::End);
+    QTextBlockFormat block;
+    block.setTopMargin(6);
+    QTextCharFormat note = textFormat(kMuted);
+    note.setFontItalic(true);
+    cursor.insertBlock(block, note);
+    cursor.insertText(text);
+    scrollToBottom();
+    scheduleSave();
+}
+
 void ChatPanel::onBusyChanged(bool busy) {
     sendButton_->setEnabled(!busy);
-    stopButton_->setEnabled(busy);
+    updateStopButton();
     if (busy) {
         statusLabel_->setText(QStringLiteral("Claude is working…"));
     } else {

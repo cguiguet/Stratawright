@@ -15,6 +15,7 @@ add_library(layer7_views STATIC
     chat/chat_panel.cpp
     chat/conversation_store.cpp
     chat/chat_references.cpp
+    chat/mic_recorder.cpp
     relaunch.cpp
     item_view_accessibility.cpp
     mixer/base_tactile_control.cpp

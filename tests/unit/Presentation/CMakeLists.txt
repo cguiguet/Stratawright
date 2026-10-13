@@ -8,16 +8,20 @@ add_executable(presentation_unit_tests
     conversation_store_test.cpp
     item_view_accessibility_test.cpp
     claude_settings_test.cpp
+    mic_recorder_test.cpp
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/updates/upstream_pull_requests.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_stream.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/conversation_store.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/item_view_accessibility.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_code_session.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_account.cpp"
+    "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/chat_references.cpp"
+    "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/mic_recorder.cpp"
 )
 
 target_include_directories(presentation_unit_tests PRIVATE
     "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_SOURCE_DIR}/src/Middle Bridge"
 )
 
 target_link_libraries(presentation_unit_tests PRIVATE

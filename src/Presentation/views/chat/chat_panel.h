@@ -3,6 +3,7 @@
 #include "claude_code_session.h"
 #include "claude_stream.h"
 #include "conversation_store.h"
+#include "mic_recorder.h"
 
 #include <QWidget>
 
@@ -42,6 +43,8 @@ public:
     void setProjectContext(bridge::IProjectLifecycleController* lifecycle, bridge::ISessionManager* sessions);
     // Adds a reference to something in the project (e.g. the selection) to the message being typed.
     void insertReference(const QString& reference);
+    // What /mic records with.
+    void setRecordingContext(const MicRecorder::Controllers& controllers);
 
 signals:
     // The user asked to restart the app (to load a rebuilt version).
@@ -52,6 +55,12 @@ protected:
 
 private:
     void sendInput();
+    // /mic [N]: records input N of the sound card (asks which without N); a second /mic stops.
+    void handleMicCommand(const QString& argument);
+    void startMic(const MicRecorder::Input& input);
+    void updateStopButton();
+    // A line in the transcript between the bubbles, for what the panel itself did.
+    void appendNote(const QString& text);
     void onStreamEvent(const StreamEvent& event);
     void onBusyChanged(bool busy);
     void appendHtml(const QString& html);
@@ -82,6 +91,7 @@ private:
     QLabel* statusLabel_ = nullptr;
     QLabel* projectLabel_ = nullptr;
     ClaudeAccount* account_ = nullptr;
+    MicRecorder* mic_ = nullptr;
     QAction* accountAction_ = nullptr;
     QAction* signAction_ = nullptr;
     QAction* readOnlyAction_ = nullptr;

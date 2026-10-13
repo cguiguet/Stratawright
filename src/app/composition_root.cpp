@@ -456,6 +456,9 @@ bool CompositionRoot::wireLayer6ToLayer7() {
     hardwareSettingsFacade->setSampleRateChangedHandler([this](uint32_t oldRate, uint32_t newRate) {
         onEngineSampleRateChanged(oldRate, newRate);
     });
+    hardwareSettingsFacade->setStreamOpenedHandler([this]() {
+        updateRecordingLatency();
+    });
     hardwareSettingsFacade_ = std::move(hardwareSettingsFacade);
 
     // 4. Instantiate Middle Bridge Controllers with concrete dependencies

@@ -107,6 +107,9 @@ bool HardwareSettingsFacade::applyConfig(const HardwareConfig& config) {
             sampleRateChanged_(oldRate, newRate);
         }
     }
+    if (streamOpened_) {
+        streamOpened_();
+    }
 
     // 5. Start audio stream processing
     return audioDriver_->startStream();

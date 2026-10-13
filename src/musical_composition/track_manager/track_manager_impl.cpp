@@ -72,18 +72,14 @@ TrackManagerImpl::TrackManagerImpl(
 }
 
 TrackManagerImpl::~TrackManagerImpl() {
+    // The session is being replaced (new or opened project) or the app is closing: take every
+    // track out of the audio graph and the butler, as deleting it would, but do not republish the
+    // timeline, which may already be another session's.
+    RetiredPlugins retired;
     for (auto& [id, track] : tracks_) {
-        if (track.instrument.pluginInstance) {
-            delete static_cast<Layer3::IPlugin*>(track.instrument.pluginInstance);
-            track.instrument.pluginInstance = nullptr;
-        }
-        for (int s = 0; s < 8; ++s) {
-            if (track.plugins[s].pluginInstance) {
-                delete static_cast<Layer3::IPlugin*>(track.plugins[s].pluginInstance);
-                track.plugins[s].pluginInstance = nullptr;
-            }
-        }
+        retireTrack(track, retired);
     }
+    freeAfterAudioThread(retired);
 }
 
 TrackID TrackManagerImpl::createTrack(const TrackCreateInfo& info) {
@@ -175,9 +171,25 @@ void TrackManagerImpl::deleteTrackInternal(TrackID id) {
         }
     }
 
-    // Take the track's plugins out of the audio graph first: the audio thread may be running them.
-    TrackState& track = it->second;
     RetiredPlugins retired;
+    retireTrack(it->second, retired);
+
+    // Out of the map, but kept alive until the audio thread has moved on to sequencer lists and
+    // timeline snapshots without it.
+    auto removedTrack = tracks_.extract(it);
+
+    syncRTSequencerList();
+    compileTimelineSnapshot();
+
+    if (!freeAfterAudioThread(retired)) {
+        // A block still running may be reading the track's sequencers: keep them too.
+        static std::vector<decltype(removedTrack)> leakedTracks;
+        leakedTracks.push_back(std::move(removedTrack));
+    }
+}
+
+void TrackManagerImpl::retireTrack(TrackState& track, RetiredPlugins& retired) {
+    // Take the track's plugins out of the audio graph first: the audio thread may be running them.
     if (track.pipeline.instrumentSlotNode.isValid()) {
         if (auto* slotNode = DSP::getInstrumentSlotState(track.pipeline.instrumentSlotNode)) {
             retired.addInstance(DSP::exchangePluginInstance(slotNode->pluginInstance, nullptr));
@@ -201,19 +213,6 @@ void TrackManagerImpl::deleteTrackInternal(TrackID id) {
 
     // Delegate DSP teardown
     builder_->destroyPipeline(track.pipeline, kernel_);
-
-    // Out of the map, but kept alive until the audio thread has moved on to sequencer lists and
-    // timeline snapshots without it.
-    auto removedTrack = tracks_.extract(it);
-
-    syncRTSequencerList();
-    compileTimelineSnapshot();
-
-    if (!freeAfterAudioThread(retired)) {
-        // A block still running may be reading the track's sequencers: keep them too.
-        static std::vector<decltype(removedTrack)> leakedTracks;
-        leakedTracks.push_back(std::move(removedTrack));
-    }
 }
 
 void TrackManagerImpl::RetiredPlugins::addInstance(void* instance) {

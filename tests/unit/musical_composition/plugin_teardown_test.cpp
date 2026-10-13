@@ -22,6 +22,7 @@ using namespace composition;
 namespace {
 
 std::set<const void*> gLivePlugins;
+int gPipelinesDestroyed = 0;
 
 class TrackedPlugin : public Layer3::IPlugin {
 public:
@@ -74,6 +75,7 @@ public:
         return desc;
     }
     void destroyPipeline(const TrackPipelineDescriptor& desc, IDSPKernel*) override {
+        ++gPipelinesDestroyed;
         if (auto* track = DSP::InstrumentTrackFactory::getRegistry().get(desc.trackNode)) {
             instrumentStillInGraph = track->instrumentSlot.pluginInstance != nullptr;
             DSP::InstrumentTrackFactory::getRegistry().deallocate(desc.trackNode);
@@ -127,6 +129,7 @@ struct Fixture {
 
     Fixture() {
         gLivePlugins.clear();
+        gPipelinesDestroyed = 0;
         auto ownedBuilder = std::make_unique<InstrumentPipelineBuilder>();
         builder = ownedBuilder.get();
         tracks = std::make_unique<TrackManagerImpl>(std::move(ownedBuilder), nullptr, nullptr, &kernel, nullptr,
@@ -137,6 +140,10 @@ struct Fixture {
         info.audioChannelCount = 2;
         track = tracks->createTrack(info);
     }
+
+    // The tests' wait observers capture their locals, gone by the time the track manager (which
+    // waits in its destructor) is destroyed.
+    ~Fixture() { kernel.onWait = nullptr; }
 
     DSP::InstrumentTrackNodeState* trackNode() const {
         return DSP::InstrumentTrackFactory::getRegistry().get(builder->lastPipeline.trackNode);
@@ -205,4 +212,25 @@ TEST_CASE("Removing an insert plugin frees it only after the audio thread let go
     CHECK(aliveDuringWait);
     CHECK(gLivePlugins.empty());
     CHECK(DSP::InsertPluginFactory::getRegistry().get(pluginNode) == nullptr);  // its node is released too
+}
+
+TEST_CASE("Dropping a session takes its tracks out of the audio graph", "[Layer5][PluginTeardown]") {
+    Fixture f;
+    f.tracks->insertTrackInstrument(f.track, 7);
+    f.tracks->insertTrackPlugin(f.track, 0, 7);
+    REQUIRE(gLivePlugins.size() == 2);
+    int waits = 0;
+    bool aliveDuringWait = false;
+    f.kernel.onWait = [&] {
+        ++waits;
+        aliveDuringWait = gLivePlugins.size() == 2;
+    };
+
+    f.tracks.reset();  // a new project replaces this one
+
+    CHECK(gPipelinesDestroyed == 1);  // its nodes leave the graph
+    CHECK(waits >= 1);
+    CHECK(aliveDuringWait);
+    CHECK(gLivePlugins.empty());
+    f.kernel.onWait = nullptr;
 }

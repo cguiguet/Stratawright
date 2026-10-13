@@ -279,6 +279,8 @@ private:
         std::vector<NodeID> insertNodes;
         void addInstance(void* instance);
     };
+    // Takes a track's plugins out of their slots (into retired) and its nodes out of the audio graph.
+    void retireTrack(TrackState& track, RetiredPlugins& retired);
     // Takes the insert plugin in slotIndex (if any) out of the chain, into retired.
     void retireInsertPlugin(DSP::PluginSlotState& slotNode, uint32_t slotIndex, RetiredPlugins& retired);
     // Waits for the audio blocks in flight, then frees retired. Returns false, leaking them, if the

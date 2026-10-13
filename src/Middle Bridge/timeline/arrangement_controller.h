@@ -6,6 +6,7 @@
 #include "musical_composition/track_manager/itrack_manager.h"
 #include "musical_composition/region_manager/iaudio_region_source_manager.h"
 #include "Core infrastructure/memory/istring_registry.h"
+#include "Core infrastructure/tempo/itempo_service.h"
 #include "musical_composition/playlist/iplaylist.h"
 #include "Media management/registry/imedia_registry.h"
 #include "Media management/waveforms/iwaveform_renderer.h"
@@ -37,6 +38,8 @@ public:
     ~ArrangementController() override;
 
     void setRecordingController(IRecordingController* rc) { recordingController_ = rc; }
+    // Places copied notes in musical time (their bar/beat anchors).
+    void setTempoService(Layer2::ITempoService* tempoService) { tempoService_ = tempoService; }
 
     // --- Clip / Region Mutations (Undoable via Layer 5) ---
     RegionID importAudioClip(TrackID targetTrack, const char* filePath, uint64_t startFrame) override;
@@ -55,6 +58,7 @@ public:
     bool getVisualRegion(RegionID regionId, VisualRegion& outRegion) const override;
     std::string getRegionSourcePath(RegionID regionId) const override;
     RegionID duplicateAudioRegion(RegionID regionId, uint64_t targetStartFrame) override;
+    RegionID duplicateMidiRegion(RegionID regionId, uint64_t targetStartFrame) override;
 
     // --- Per-Clip Properties ---
     void setRegionGain(RegionID id, float gainLinear) override;
@@ -102,6 +106,7 @@ private:
 
     ISessionManager* sessionManager_ = nullptr;
     IRecordingController* recordingController_ = nullptr;
+    Layer2::ITempoService* tempoService_ = nullptr;
     Layer2::IStringRegistry* stringRegistry_ = nullptr;
     MediaManagement::IMediaRegistry* mediaRegistry_ = nullptr;
     MediaManagement::IWaveformRenderer* waveformRenderer_ = nullptr;

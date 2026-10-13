@@ -484,6 +484,7 @@ bool CompositionRoot::wireLayer6ToLayer7() {
         fileSystem_.get()
     );
     arrangementController_->setRecordingController(recordingController_.get());
+    arrangementController_->setTempoService(tempoService_.get());
 
     automationController_ = std::make_unique<bridge::AutomationController>(
         sessionManager_.get(),

@@ -11,6 +11,7 @@ add_executable(middle_bridge_unit_tests
     track_ui_state_builder_test.cpp
     timeline_controller_test.cpp
     arrangement_controller_test.cpp
+    midi_duplicate_test.cpp
     automation_controller_test.cpp
     waveform_cache_provider_test.cpp
     session_management_test.cpp
@@ -41,6 +42,7 @@ target_link_libraries(middle_bridge_unit_tests PRIVATE
     layer3_plugin
     layer2_bridges
     layer2_memory
+    layer2_tempo
     layer1_common
     Qt6::Widgets
 )

@@ -62,6 +62,9 @@ public:
     virtual std::string getRegionSourcePath(RegionID /*regionId*/) const { return {}; }
     // Copy an audio region (same source file, trim, gain, fades, mute) to targetStartFrame on its track.
     virtual RegionID duplicateAudioRegion(RegionID /*regionId*/, uint64_t /*targetStartFrame*/) { return RegionID::invalid(); }
+    // Copy a MIDI region (its notes, controllers and pitch bends in a new clip of its own, gain,
+    // mute, name) to targetStartFrame on its track.
+    virtual RegionID duplicateMidiRegion(RegionID /*regionId*/, uint64_t /*targetStartFrame*/) { return RegionID::invalid(); }
 
     // --- Per-Clip Properties ---
     virtual void setRegionGain(RegionID id, float gainLinear) = 0;

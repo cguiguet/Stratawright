@@ -17,6 +17,7 @@
 #include "Core audio engine/streaming/ibutler_thread.h"
 #include <cstring>
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 
 namespace bridge {
@@ -1059,6 +1060,93 @@ RegionID ArrangementController::duplicateAudioRegion(RegionID regionId, uint64_t
     setRegionGain(copy, original.gainLinear);
     setRegionFades(copy, original.fadeInFrames, original.fadeOutFrames);
     setRegionMuted(copy, original.isMuted);
+    return copy;
+}
+
+RegionID ArrangementController::duplicateMidiRegion(RegionID regionId, uint64_t targetStartFrame) {
+    auto* trackManager = getTrackManager();
+    composition::IPlaylist::RegionInfo info{};
+    TrackID trackId = TrackID::invalid();
+    VisualRegion original{};
+    if (!trackManager || !findPlaylistForRegion(regionId, info, trackId) ||
+        info.region.type != composition::RegionType::MIDI || !getVisualRegion(regionId, original)) {
+        return RegionID::invalid();
+    }
+    auto* sequencer = trackManager->getMIDISequencer(trackId);
+    if (!sequencer) {
+        return RegionID::invalid();
+    }
+
+    // A new clip of its own: clips sharing their source would share their notes.
+    const RegionID copy = insertMidiClip(trackId, targetStartFrame, info.region.sourceLength);
+    composition::IPlaylist::RegionInfo copyInfo{};
+    TrackID copyTrack = TrackID::invalid();
+    if (!copy.isValid() || !findPlaylistForRegion(copy, copyInfo, copyTrack)) {
+        return copy;
+    }
+    const ClipID source = ClipID::fromRaw(info.region.sourceId.toRaw());
+    const ClipID target = ClipID::fromRaw(copyInfo.region.sourceId.toRaw());
+
+    // What the region shows: its source from sourceStartSample, for sourceLength samples.
+    const uint64_t windowStart = info.region.sourceStartSample;
+    const uint64_t windowEnd = windowStart + info.region.sourceLength;
+    const auto inWindow = [&](uint64_t offset) { return offset >= windowStart && offset < windowEnd; };
+    const auto anchor = [this](uint64_t frame) {
+        composition::MusicalPosition position{};
+        if (tempoService_) {
+            const Layer2::BBTPosition bbt = tempoService_->samplesToBBT(frame);
+            position.bar = bbt.bar;
+            position.beat = static_cast<uint16_t>(bbt.beat);
+            position.tick = bbt.tick;
+        }
+        return position;  // left unset without a tempo map: nothing will move the note
+    };
+    const auto absoluteTicks = [this](uint64_t frame) -> uint64_t {
+        return tempoService_ ? static_cast<uint64_t>(std::llround(tempoService_->samplesToBeats(frame) *
+                                                                  tempoService_->getTicksPerBeat()))
+                             : 0;
+    };
+
+    std::vector<composition::MIDINote> notes(8192);
+    const uint32_t noteCount = sequencer->getNotesInClip(source, notes.data(), static_cast<uint32_t>(notes.size()));
+    for (uint32_t i = 0; i < noteCount; ++i) {
+        composition::MIDINote note = notes[i];
+        if (!inWindow(note.offsetSample)) {
+            continue;
+        }
+        note.noteId = {0, 0};
+        note.offsetSample -= windowStart;
+        note.startSample = targetStartFrame + note.offsetSample;
+        note.endSample = note.startSample + note.durationSample;
+        note.startPosition = anchor(note.startSample);
+        note.endPosition = anchor(note.endSample);
+        sequencer->addNote(target, note);
+    }
+    std::vector<composition::MIDICCPoint> controllers(8192);
+    const uint32_t ccCount = sequencer->getCCPointsInClip(source, controllers.data(), static_cast<uint32_t>(controllers.size()));
+    for (uint32_t i = 0; i < ccCount; ++i) {
+        composition::MIDICCPoint point = controllers[i];
+        if (inWindow(point.samplePosition)) {
+            point.samplePosition -= windowStart;
+            point.absoluteTickPosition = absoluteTicks(targetStartFrame + point.samplePosition);
+            sequencer->addCCPoint(target, point);
+        }
+    }
+    std::vector<composition::MIDIPitchPoint> bends(8192);
+    const uint32_t bendCount = sequencer->getPitchPointsInClip(source, bends.data(), static_cast<uint32_t>(bends.size()));
+    for (uint32_t i = 0; i < bendCount; ++i) {
+        composition::MIDIPitchPoint point = bends[i];
+        if (inWindow(point.samplePosition)) {
+            point.samplePosition -= windowStart;
+            point.absoluteTickPosition = absoluteTicks(targetStartFrame + point.samplePosition);
+            sequencer->addPitchPoint(target, point);
+        }
+    }
+
+    setRegionGain(copy, original.gainLinear);
+    setRegionMuted(copy, original.isMuted);
+    updateRegionMetadata(copy, original.name, "", original.colorARGB);
+    trackManager->compileTimelineSnapshot();
     return copy;
 }
 

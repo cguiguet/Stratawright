@@ -3,6 +3,8 @@
 
 #include <QPushButton>
 #include <QMenu>
+#include <QMenuBar>
+#include <functional>
 #include "timeline/itimeline_controller.h"
 #include "project/iworkspace_controller.h"
 #include "engine/iinput_mode_controller.h"
@@ -24,6 +26,11 @@ public:
         bridge::IWorkspaceController* workspace = nullptr,
         QWidget* parent = nullptr);
     ~PlaylistMenuButton() override = default;
+
+    // Puts the menus in the window's menu bar instead, and hides this button: Edit, Snap, Select,
+    // Zoom, Time Marker, Playhead and Diagnostics become menus of their own, and the project
+    // commands other than Open and Save join fileMenu.
+    void moveToMenuBar(QMenuBar* bar, QMenu* fileMenu);
 
 
 signals:
@@ -52,6 +59,9 @@ private slots:
 
 private:
     void buildMenu();
+    // Project commands go in projectMenu (Open and Save too if withOpenSave), the other groups in
+    // the menus addMenu makes.
+    void buildMenus(QMenu* projectMenu, bool withOpenSave, const std::function<QMenu*(const QString&)>& addMenu);
 
 private:
     bridge::ITimelineController*  m_timeline{nullptr};

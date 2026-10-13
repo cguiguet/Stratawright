@@ -630,10 +630,7 @@ void PlaylistWindow::installKeyboardShortcuts()
     sm.bind(this, ShortcutAction::Playlist_SelectAll, [this]() {
         if (m_canvas) m_canvas->selectAll();
     });
-    // New, Open, Save and Save As are on the File menu (MainWindow), with their shortcuts.
-    sm.bind(this, ShortcutAction::Playlist_OpenExportDialog, [this]() {
-        openExportDialog(0);
-    });
+    // New, Open, Save, Save As and Export are on the File menu (MainWindow), with their shortcuts.
 
     // Zoom shortcuts
     sm.bindSequence(this, QKeySequence(Qt::CTRL | Qt::Key_Equal), [this]() { zoomHorizontal(1.25); });
@@ -1569,6 +1566,13 @@ bool PlaylistWindow::confirmDiscardChanges()
         return !QString::fromStdString(m_ctrl.lifecycle->getCurrentProjectPath()).isEmpty();
     }
     return true;
+}
+
+void PlaylistWindow::moveMenusToMenuBar(QMenuBar* bar, QMenu* fileMenu)
+{
+    if (m_menuBtn) {
+        m_menuBtn->moveToMenuBar(bar, fileMenu);
+    }
 }
 
 void PlaylistWindow::onNewProject()

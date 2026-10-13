@@ -4,6 +4,8 @@
 #include <QDebug>
 #include "theme.h"
 #include <QActionGroup>
+#include <QMenuBar>
+#include "../../shortcuts/ShortcutRegistry.h"
 
 namespace presentation::views {
 
@@ -27,63 +29,68 @@ PlaylistMenuButton::PlaylistMenuButton(
     m_menu = new QMenu(this);
     buildMenu();
     setMenu(m_menu);
-
-    connect(m_menu, &QMenu::triggered, this, &PlaylistMenuButton::onMenuTriggered);
 }
 
 void PlaylistMenuButton::buildMenu()
 {
     m_menu->clear();
+    QMenu* projectMenu = m_menu->addMenu(QStringLiteral("Project"));
+    buildMenus(projectMenu, true, [this](const QString& title) { return m_menu->addMenu(title); });
+}
 
-    // --- 1. Project Submenu ---
-    auto* projectMenu = m_menu->addMenu(QStringLiteral("Project"));
-    
-    QAction* openAct = projectMenu->addAction(QStringLiteral("Open Session..."));
-    openAct->setData(QStringLiteral("open_project"));
+void PlaylistMenuButton::moveToMenuBar(QMenuBar* bar, QMenu* fileMenu)
+{
+    setMenu(nullptr);
+    m_menu->clear();
+    hide();
+    // Owned by this button, so they leave the menu bar with the playlist that created them.
+    buildMenus(fileMenu, false, [this, bar](const QString& title) {
+        auto* menu = new QMenu(title, this);
+        bar->addMenu(menu);
+        return menu;
+    });
+}
 
-    QAction* saveAct = projectMenu->addAction(QStringLiteral("Save Session"));
-    saveAct->setData(QStringLiteral("save_project"));
+void PlaylistMenuButton::buildMenus(QMenu* projectMenu, bool withOpenSave,
+                                    const std::function<QMenu*(const QString&)>& addMenu)
+{
+    // Actions belong to this button whatever menu shows them (the File menu outlives it).
+    const auto add = [this](QMenu* menu, const QString& text, const QString& id) {
+        auto* action = new QAction(text, this);
+        action->setData(id);
+        menu->addAction(action);
+        connect(action, &QAction::triggered, this, [this, action]() { onMenuTriggered(action); });
+        return action;
+    };
+    const auto separator = [this](QMenu* menu) {
+        auto* action = new QAction(this);
+        action->setSeparator(true);
+        menu->addAction(action);
+    };
 
-    QAction* saveAsAct = projectMenu->addAction(QStringLiteral("Save Session As..."));
-    saveAsAct->setData(QStringLiteral("save_project_as"));
+    // --- 1. Project ---
+    if (withOpenSave) {
+        add(projectMenu, QStringLiteral("Open Session..."), QStringLiteral("open_project"));
+        add(projectMenu, QStringLiteral("Save Session"), QStringLiteral("save_project"));
+        add(projectMenu, QStringLiteral("Save Session As..."), QStringLiteral("save_project_as"));
+    }
+    separator(projectMenu);
+    add(projectMenu, QStringLiteral("Export Audio Mixdown..."), QStringLiteral("export_audio"))
+        ->setShortcut(shortcuts::ShortcutRegistry::instance().getSequence(shortcuts::ShortcutAction::Playlist_OpenExportDialog));
+    add(projectMenu, QStringLiteral("Export Stems..."), QStringLiteral("export_stems"))
+        ->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+R")));
+    add(projectMenu, QStringLiteral("Render Queue / Jobs..."), QStringLiteral("render_queue"));
+    separator(projectMenu);
+    add(projectMenu, QStringLiteral("Export Session to JSON..."), QStringLiteral("export_project_json"));
+    add(projectMenu, QStringLiteral("Import Session from JSON..."), QStringLiteral("import_project_json"));
 
-    projectMenu->addSeparator();
+    // --- 2. Edit ---
+    QMenu* editMenu = addMenu(QStringLiteral("Edit"));
+    add(editMenu, QStringLiteral("Undo"), QStringLiteral("undo"));
+    add(editMenu, QStringLiteral("Redo"), QStringLiteral("redo"));
 
-    QAction* exportAudioAct = projectMenu->addAction(QStringLiteral("Export Audio Mixdown..."));
-    exportAudioAct->setData(QStringLiteral("export_audio"));
-    exportAudioAct->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
-
-    QAction* exportStemsAct = projectMenu->addAction(QStringLiteral("Export Stems..."));
-    exportStemsAct->setData(QStringLiteral("export_stems"));
-    exportStemsAct->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+R")));
-
-    QAction* renderQueueAct = projectMenu->addAction(QStringLiteral("Render Queue / Jobs..."));
-    renderQueueAct->setData(QStringLiteral("render_queue"));
-
-    projectMenu->addSeparator();
-
-    QAction* exportJsonAct = projectMenu->addAction(QStringLiteral("Export Session to JSON..."));
-    exportJsonAct->setData(QStringLiteral("export_project_json"));
-
-    QAction* importJsonAct = projectMenu->addAction(QStringLiteral("Import Session from JSON..."));
-    importJsonAct->setData(QStringLiteral("import_project_json"));
-
-    m_menu->addSeparator();
-
-    // --- 2. Edit Submenu ---
-    auto* editMenu = m_menu->addMenu(QStringLiteral("Edit"));
-    
-    QAction* undoAct = editMenu->addAction(QStringLiteral("Undo"));
-    undoAct->setData(QStringLiteral("undo"));
-
-    QAction* redoAct = editMenu->addAction(QStringLiteral("Redo"));
-    redoAct->setData(QStringLiteral("redo"));
-
-
-
-    // --- 4. Snap Submenu ---
-    auto* snapMenu = m_menu->addMenu(QStringLiteral("Snap"));
-    
+    // --- 3. Snap ---
+    QMenu* snapMenu = addMenu(QStringLiteral("Snap"));
     struct SnapItem {
         QString label;
         bridge::SnapMode mode;
@@ -105,54 +112,32 @@ void PlaylistMenuButton::buildMenu()
         { QStringLiteral("1/64T Note"), bridge::SnapMode::Note_1_64_Triplet }
     };
     for (const auto& item : snapItems) {
-        QAction* act = snapMenu->addAction(item.label);
-        act->setData(QStringLiteral("snap_%1").arg(static_cast<int>(item.mode)));
+        add(snapMenu, item.label, QStringLiteral("snap_%1").arg(static_cast<int>(item.mode)));
     }
 
-    m_menu->addSeparator();
+    // --- 4. Select ---
+    QMenu* selectMenu = addMenu(QStringLiteral("Select"));
+    add(selectMenu, QStringLiteral("Select All"), QStringLiteral("select_all"));
+    add(selectMenu, QStringLiteral("Deselect All"), QStringLiteral("deselect_all"));
 
-    // --- 5. Select Submenu ---
-    auto* selectMenu = m_menu->addMenu(QStringLiteral("Select"));
-    
-    QAction* selAll = selectMenu->addAction(QStringLiteral("Select All"));
-    selAll->setData(QStringLiteral("select_all"));
-    QAction* deselAll = selectMenu->addAction(QStringLiteral("Deselect All"));
-    deselAll->setData(QStringLiteral("deselect_all"));
+    // --- 5. Zoom ---
+    QMenu* zoomMenu = addMenu(QStringLiteral("Zoom"));
+    add(zoomMenu, QStringLiteral("Zoom In"), QStringLiteral("zoom_in"));
+    add(zoomMenu, QStringLiteral("Zoom Out"), QStringLiteral("zoom_out"));
+    add(zoomMenu, QStringLiteral("Reset Zoom"), QStringLiteral("zoom_reset"));
 
-    m_menu->addSeparator();
+    // --- 6. Time Marker ---
+    QMenu* markerMenu = addMenu(QStringLiteral("Time Marker"));
+    add(markerMenu, QStringLiteral("Add Song Marker"), QStringLiteral("add_marker"));
 
-    // --- 7. Zoom Submenu ---
-    auto* zoomMenu = m_menu->addMenu(QStringLiteral("Zoom"));
-    
-    QAction* zoomIn = zoomMenu->addAction(QStringLiteral("Zoom In"));
-    zoomIn->setData(QStringLiteral("zoom_in"));
-    QAction* zoomOut = zoomMenu->addAction(QStringLiteral("Zoom Out"));
-    zoomOut->setData(QStringLiteral("zoom_out"));
-    QAction* zoomReset = zoomMenu->addAction(QStringLiteral("Reset Zoom"));
-    zoomReset->setData(QStringLiteral("zoom_reset"));
+    // --- 7. Playhead ---
+    QMenu* playheadMenu = addMenu(QStringLiteral("Playhead"));
+    add(playheadMenu, QStringLiteral("Seek to Song Start"), QStringLiteral("seek_start"));
+    add(playheadMenu, QStringLiteral("Seek to Loop Start"), QStringLiteral("seek_loop"));
 
-    // --- 8. Time Marker Submenu ---
-    auto* markerMenu = m_menu->addMenu(QStringLiteral("Time Marker"));
-    
-    QAction* addMarkerAct = markerMenu->addAction(QStringLiteral("Add Song Marker"));
-    addMarkerAct->setData(QStringLiteral("add_marker"));
-
-    m_menu->addSeparator();
-
-    // --- 9. Playhead Submenu ---
-    auto* playheadMenu = m_menu->addMenu(QStringLiteral("Playhead"));
-    
-    QAction* seekStart = playheadMenu->addAction(QStringLiteral("Seek to Song Start"));
-    seekStart->setData(QStringLiteral("seek_start"));
-    QAction* seekLoop = playheadMenu->addAction(QStringLiteral("Seek to Loop Start"));
-    seekLoop->setData(QStringLiteral("seek_loop"));
-
-    m_menu->addSeparator();
-
-    // --- 10. Diagnostics Submenu ---
-    auto* diagnosticsMenu = m_menu->addMenu(QStringLiteral("Diagnostics"));
-    QAction* analyzeLoudnessAct = diagnosticsMenu->addAction(QStringLiteral("Analyze Session Loudness"));
-    analyzeLoudnessAct->setData(QStringLiteral("analyze_loudness"));
+    // --- 8. Diagnostics ---
+    QMenu* diagnosticsMenu = addMenu(QStringLiteral("Diagnostics"));
+    add(diagnosticsMenu, QStringLiteral("Analyze Session Loudness"), QStringLiteral("analyze_loudness"));
 }
 
 void PlaylistMenuButton::onMenuTriggered(QAction* action)

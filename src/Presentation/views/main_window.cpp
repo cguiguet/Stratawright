@@ -283,6 +283,7 @@ void MainWindow::setPlaylistControllers(const PlaylistWindow::Controllers& playl
     m_chatPanel->setRecordingContext({playlistCtrls.track, playlistCtrls.timeline, playlistCtrls.arrangement, m_hardwareSettingsFacade});
 
     m_playlistWindow = new PlaylistWindow(playlistCtrls, this);
+    m_playlistWindow->moveMenusToMenuBar(menuBar(), m_fileMenu);
     m_mainSplitter->insertWidget(0, m_playlistWindow);
 
     // Bind MixerWindow with controllers and metering
@@ -358,6 +359,7 @@ void MainWindow::paintEvent(QPaintEvent* event) {
 void MainWindow::buildFileMenu() {
     using shortcuts::ShortcutAction;
     QMenu* file = menuBar()->addMenu(tr("File"));
+    m_fileMenu = file;
     const auto add = [this, file](const QString& text, ShortcutAction shortcut, void (PlaylistWindow::*command)()) {
         QAction* action = file->addAction(text);
         action->setShortcut(shortcuts::ShortcutRegistry::instance().getSequence(shortcut));

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QMenuBar>
 #include <QTimer>
 #include <QShortcut>
 #include <QElapsedTimer>
@@ -174,6 +175,10 @@ public:
     void reloadTracks();
     int getMaxVerticalOffset() const;
     void onAnalyzeLoudnessRequested();
+
+    // Moves the playlist's menu (edit, snap, zoom...) from its button to the window's menu bar,
+    // its project commands into fileMenu.
+    void moveMenusToMenuBar(QMenuBar* bar, QMenu* fileMenu);
 
     // File menu: start an empty project, open one, save. New and Open first ask what to do with
     // unsaved changes.

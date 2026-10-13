@@ -119,6 +119,7 @@ private:
     controllers::PresentationDirector m_director;
 
     bridge::IHardwareSettingsFacade* m_hardwareSettingsFacade{nullptr};
+    QMenu* m_fileMenu{nullptr};  // File menu of the menu bar
     bridge::ITimelineController* m_timelineController{nullptr};
     bridge::IProjectLifecycleController* m_lifecycleController{nullptr};
     bridge::IWorkspaceController* m_workspaceController{nullptr};

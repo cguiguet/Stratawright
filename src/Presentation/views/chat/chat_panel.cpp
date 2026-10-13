@@ -1,13 +1,24 @@
 #include "chat_panel.h"
 
 #include "assistant_instructions.h"
+#include "claude_account.h"
 #include "claude_code_session.h"
 
 #include "Middle Bridge/project/iproject_lifecycle_controller.h"
 #include "Middle Bridge/project/isession_manager.h"
 
+#include <QAction>
+#include <QActionGroup>
+#include <QClipboard>
 #include <QDir>
+#include <QFileDialog>
 #include <QFileInfo>
+#include <QGuiApplication>
+#include <QMenu>
+#include <QMessageBox>
+#include <QSaveFile>
+#include <QSettings>
+#include <QToolButton>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -36,7 +47,55 @@ const char* const kPanelStyle = R"(
     QPushButton#sendButton { background-color: #a78bfa; color: #161616; font-weight: bold; }
     QLabel#chatStatus { color: #888888; font-size: 11px; }
     QLabel#chatProject { color: #a78bfa; font-size: 12px; font-weight: bold; }
+    QToolButton#chatMenu { color: #e8e8e8; background: transparent; border: none; border-radius: 4px; font-size: 16px; padding: 0px 6px; }
+    QToolButton#chatMenu:hover { background-color: #323232; }
+    QToolButton#chatMenu::menu-indicator { image: none; }
 )";
+
+struct Choice {
+    const char* label;
+    const char* value;  // empty: Claude Code's default
+};
+
+constexpr Choice kModels[] = {
+    {"Default", ""}, {"Fable", "fable"}, {"Opus", "opus"}, {"Sonnet", "sonnet"}, {"Haiku", "haiku"},
+};
+constexpr Choice kEfforts[] = {
+    {"Default", ""}, {"Low", "low"}, {"Medium", "medium"}, {"High", "high"}, {"Extra high", "xhigh"}, {"Max", "max"},
+};
+
+template <size_t N>
+QString labelOf(const Choice (&choices)[N], const QString& value) {
+    for (const Choice& choice : choices) {
+        if (value == QLatin1String(choice.value)) {
+            return QString::fromLatin1(choice.label);
+        }
+    }
+    return value;
+}
+
+// Adds the choices to menu as exclusive checkable items calling onChosen with the value.
+template <size_t N, typename OnChosen>
+void addChoices(QMenu* menu, const Choice (&choices)[N], const QString& current, OnChosen onChosen) {
+    auto* group = new QActionGroup(menu);
+    for (const Choice& choice : choices) {
+        QAction* action = menu->addAction(QString::fromLatin1(choice.label));
+        action->setCheckable(true);
+        action->setChecked(current == QLatin1String(choice.value));
+        group->addAction(action);
+        const QString value = QString::fromLatin1(choice.value);
+        QObject::connect(action, &QAction::triggered, menu, [onChosen, value]() { onChosen(value); });
+    }
+}
+
+ClaudeCodeSession::Settings loadSettings() {
+    const QSettings settings(QStringLiteral("Stratawright"), QStringLiteral("Stratawright"));
+    ClaudeCodeSession::Settings loaded;
+    loaded.model = settings.value(QStringLiteral("chat/model")).toString();
+    loaded.effort = settings.value(QStringLiteral("chat/effort")).toString();
+    loaded.readOnly = settings.value(QStringLiteral("chat/readOnly"), false).toBool();
+    return loaded;
+}
 
 QString escaped(const QString& text) {
     return text.toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>"));
@@ -113,6 +172,12 @@ ChatPanel::ChatPanel(QWidget* parent) : QWidget(parent) {
     statusLabel_->setObjectName(QStringLiteral("chatStatus"));
     projectLabel_ = new QLabel(this);
     projectLabel_->setObjectName(QStringLiteral("chatProject"));
+    session_->setSettings(loadSettings());
+    account_ = new ClaudeAccount(this);
+    auto* header = new QHBoxLayout();
+    header->addWidget(projectLabel_);
+    header->addStretch();
+    header->addWidget(buildMenuButton());
 
     auto* buttons = new QHBoxLayout();
     buttons->addWidget(newButton);
@@ -124,7 +189,7 @@ ChatPanel::ChatPanel(QWidget* parent) : QWidget(parent) {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(6);
-    layout->addWidget(projectLabel_);
+    layout->addLayout(header);
     layout->addWidget(transcript_, 1);
     layout->addWidget(input_);
     layout->addLayout(buttons);
@@ -248,6 +313,147 @@ void ChatPanel::updateProjectLabel() {
     projectLabel_->setToolTip(conversation_.projectPath.isEmpty()
         ? QStringLiteral("This conversation moves to the project when you save it.")
         : conversation_.projectPath);
+}
+
+QToolButton* ChatPanel::buildMenuButton() {
+    auto* button = new QToolButton(this);
+    button->setObjectName(QStringLiteral("chatMenu"));
+    button->setText(QStringLiteral("⋯"));
+    button->setToolTip(QStringLiteral("Chat settings"));
+    button->setPopupMode(QToolButton::InstantPopup);
+    auto* menu = new QMenu(button);
+    button->setMenu(menu);
+
+    accountAction_ = menu->addAction(account_->status().description());
+    accountAction_->setEnabled(false);
+    signAction_ = menu->addAction(QStringLiteral("Sign out…"));
+    connect(signAction_, &QAction::triggered, this, [this]() {
+        if (!account_->status().loggedIn) {
+            account_->signInInTerminal();
+            statusLabel_->setText(QStringLiteral("Finish signing in in Terminal, then open this menu again."));
+            return;
+        }
+        const auto answer = QMessageBox::question(this, QStringLiteral("Sign out"),
+            QStringLiteral("Sign out of Claude Code on this Mac? Claude Code in your terminal is signed out too."));
+        if (answer == QMessageBox::Yes) {
+            account_->signOut();
+        }
+    });
+    menu->addSeparator();
+
+    const ClaudeCodeSession::Settings& settings = session_->settings();
+    modelMenu_ = menu->addMenu(QString());
+    addChoices(modelMenu_, kModels, settings.model, [this](const QString& model) {
+        ClaudeCodeSession::Settings changed = session_->settings();
+        changed.model = model;
+        applySettings(changed);
+    });
+    effortMenu_ = menu->addMenu(QString());
+    addChoices(effortMenu_, kEfforts, settings.effort, [this](const QString& effort) {
+        ClaudeCodeSession::Settings changed = session_->settings();
+        changed.effort = effort;
+        applySettings(changed);
+    });
+    readOnlyAction_ = menu->addAction(QStringLiteral("Read only: answers and plans, changes nothing"));
+    readOnlyAction_->setCheckable(true);
+    readOnlyAction_->setChecked(settings.readOnly);
+    connect(readOnlyAction_, &QAction::toggled, this, [this](bool readOnly) {
+        ClaudeCodeSession::Settings changed = session_->settings();
+        changed.readOnly = readOnly;
+        applySettings(changed);
+    });
+    menu->addSeparator();
+
+    connect(menu->addAction(QStringLiteral("Export conversation…")), &QAction::triggered, this, &ChatPanel::exportConversation);
+    connect(menu->addAction(QStringLiteral("Copy conversation")), &QAction::triggered, this, [this]() {
+        QGuiApplication::clipboard()->setText(transcript_->document()->toMarkdown());
+        statusLabel_->setText(QStringLiteral("Conversation copied as Markdown"));
+    });
+    terminalAction_ = menu->addAction(QStringLiteral("Continue in Terminal"));
+    terminalAction_->setToolTip(QStringLiteral("Opens this conversation in Claude Code in Terminal."));
+    connect(terminalAction_, &QAction::triggered, this, &ChatPanel::continueInTerminal);
+
+    connect(menu, &QMenu::aboutToShow, this, [this]() {
+        account_->refresh();
+        terminalAction_->setEnabled(!conversation_.sessionId.isEmpty() && !session_->isBusy());
+    });
+    connect(account_, &ClaudeAccount::statusChanged, this, &ChatPanel::updateAccountActions);
+    connect(account_, &ClaudeAccount::failed, this, &ChatPanel::showError);
+    account_->refresh();
+    applySettings(settings);  // titles of the submenus
+    return button;
+}
+
+void ChatPanel::applySettings(const ClaudeCodeSession::Settings& settings) {
+    const bool changed = !(settings == session_->settings());
+    session_->setSettings(settings);
+    modelMenu_->setTitle(QStringLiteral("Model · %1").arg(labelOf(kModels, settings.model)));
+    effortMenu_->setTitle(QStringLiteral("Effort · %1").arg(labelOf(kEfforts, settings.effort)));
+    if (!changed) {
+        return;
+    }
+    QSettings stored(QStringLiteral("Stratawright"), QStringLiteral("Stratawright"));
+    stored.setValue(QStringLiteral("chat/model"), settings.model);
+    stored.setValue(QStringLiteral("chat/effort"), settings.effort);
+    stored.setValue(QStringLiteral("chat/readOnly"), settings.readOnly);
+    statusLabel_->setText(QStringLiteral("%1 · effort %2%3 — from the next message")
+                              .arg(labelOf(kModels, settings.model), labelOf(kEfforts, settings.effort).toLower(),
+                                   settings.readOnly ? QStringLiteral(" · read only") : QString()));
+}
+
+void ChatPanel::updateAccountActions() {
+    const AccountStatus& status = account_->status();
+    accountAction_->setText(status.description());
+    signAction_->setText(status.loggedIn ? QStringLiteral("Sign out…") : QStringLiteral("Sign in…"));
+    signAction_->setEnabled(status.known || !ClaudeCodeSession::findClaudeExecutable().isEmpty());
+}
+
+void ChatPanel::exportConversation() {
+    const QString name = conversation_.projectPath.isEmpty()
+        ? QStringLiteral("Untitled project")
+        : QFileInfo(conversation_.projectPath).completeBaseName();
+    const QString directory = conversation_.projectPath.isEmpty() ? QDir::homePath() : QFileInfo(conversation_.projectPath).absolutePath();
+    QString filter;
+    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Export conversation"),
+        QDir(directory).filePath(name + QStringLiteral(" - chat.md")),
+        QStringLiteral("Markdown (*.md);;Web page (*.html)"), &filter);
+    if (path.isEmpty()) {
+        return;
+    }
+    const bool html = path.endsWith(QStringLiteral(".html"), Qt::CaseInsensitive) || filter.contains(QStringLiteral("html"));
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        showError(QStringLiteral("Could not write %1.").arg(path));
+        return;
+    }
+    file.write((html ? transcript_->toHtml() : transcript_->document()->toMarkdown()).toUtf8());
+    if (!file.commit()) {
+        showError(QStringLiteral("Could not write %1.").arg(path));
+        return;
+    }
+    statusLabel_->setText(QStringLiteral("Conversation exported to %1").arg(QFileInfo(path).fileName()));
+}
+
+void ChatPanel::continueInTerminal() {
+    const QString claude = ClaudeCodeSession::findClaudeExecutable();
+    if (conversation_.sessionId.isEmpty() || claude.isEmpty()) {
+        return;
+    }
+    // The panel's process lets go of the conversation; its next message picks up what was said in
+    // Terminal.
+    session_->stop();
+    QStringList command{claude, QStringLiteral("--resume"), conversation_.sessionId};
+    const ClaudeCodeSession::Settings& settings = session_->settings();
+    if (!settings.model.isEmpty()) {
+        command << QStringLiteral("--model") << settings.model;
+    }
+    if (!settings.effort.isEmpty()) {
+        command << QStringLiteral("--effort") << settings.effort;
+    }
+    const QString source = sourceDirectory();
+    if (!runInTerminal(source.isEmpty() ? QDir::homePath() : source, command)) {
+        showError(QStringLiteral("Could not open Terminal."));
+    }
 }
 
 void ChatPanel::insertReference(const QString& reference) {

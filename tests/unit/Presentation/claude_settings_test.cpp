@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "Presentation/views/chat/claude_account.h"
 #include "Presentation/views/chat/claude_code_session.h"
 
 using namespace presentation::chat;
@@ -38,4 +39,19 @@ TEST_CASE("Claude Code runs with the chat settings", "[presentation][chat]") {
     CHECK_FALSE(tools.contains(QStringLiteral("Bash")));
     CHECK_FALSE(tools.contains(QStringLiteral("Edit")));
     CHECK_FALSE(tools.contains(QStringLiteral("Write")));
+}
+
+TEST_CASE("Claude Code account status", "[presentation][chat]") {
+    const AccountStatus signedIn = parseAuthStatus(
+        R"({"loggedIn": true, "authMethod": "claude.ai", "email": "me@example.com", "subscriptionType": "max"})");
+    CHECK(signedIn.known);
+    CHECK(signedIn.loggedIn);
+    CHECK(signedIn.description() == QStringLiteral("Signed in as me@example.com · Max"));
+
+    const AccountStatus signedOut = parseAuthStatus(R"({"loggedIn": false})");
+    CHECK(signedOut.known);
+    CHECK_FALSE(signedOut.loggedIn);
+    CHECK(signedOut.description() == QStringLiteral("Not signed in to Claude Code"));
+
+    CHECK_FALSE(parseAuthStatus("not json").known);
 }

@@ -1,11 +1,15 @@
 #pragma once
 
+#include "claude_code_session.h"
 #include "claude_stream.h"
 #include "conversation_store.h"
 
 #include <QWidget>
 
+class QAction;
 class QLabel;
+class QMenu;
+class QToolButton;
 class QTimer;
 class QPlainTextEdit;
 class QTextCursor;
@@ -20,7 +24,7 @@ class ISessionManager;
 
 namespace presentation::chat {
 
-class ClaudeCodeSession;
+class ClaudeAccount;
 
 // Chat with Claude Code from inside the app: it can drive the open project through daw-cli and
 // change the app's own code. See ClaudeCodeSession for how Claude Code is run. Each project has its
@@ -63,6 +67,12 @@ private:
     void scheduleSave();
     void saveConversation();
     void updateProjectLabel();
+    // The "⋯" menu: account, model, effort, read-only mode, export and terminal.
+    QToolButton* buildMenuButton();
+    void applySettings(const ClaudeCodeSession::Settings& settings);
+    void updateAccountActions();
+    void exportConversation();
+    void continueInTerminal();
 
     ClaudeCodeSession* session_ = nullptr;
     QTextBrowser* transcript_ = nullptr;
@@ -71,6 +81,13 @@ private:
     QPushButton* stopButton_ = nullptr;
     QLabel* statusLabel_ = nullptr;
     QLabel* projectLabel_ = nullptr;
+    ClaudeAccount* account_ = nullptr;
+    QAction* accountAction_ = nullptr;
+    QAction* signAction_ = nullptr;
+    QAction* readOnlyAction_ = nullptr;
+    QAction* terminalAction_ = nullptr;
+    QMenu* modelMenu_ = nullptr;
+    QMenu* effortMenu_ = nullptr;
     ConversationStore store_;
     Conversation conversation_;
     bridge::IProjectLifecycleController* lifecycle_ = nullptr;

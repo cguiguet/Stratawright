@@ -10,6 +10,7 @@ add_library(layer7_views STATIC
     updates/upstream_pull_request_notifier.cpp
     chat/claude_stream.cpp
     chat/claude_code_session.cpp
+    chat/claude_account.cpp
     chat/assistant_instructions.cpp
     chat/chat_panel.cpp
     chat/conversation_store.cpp

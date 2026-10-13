@@ -13,6 +13,7 @@ add_executable(presentation_unit_tests
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/conversation_store.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/item_view_accessibility.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_code_session.cpp"
+    "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_account.cpp"
 )
 
 target_include_directories(presentation_unit_tests PRIVATE

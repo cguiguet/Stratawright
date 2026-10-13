@@ -34,6 +34,55 @@ ClaudeCodeSession::~ClaudeCodeSession() {
     }
 }
 
+QStringList ClaudeCodeSession::arguments(const Settings& settings, const QString& systemPrompt, const QString& sessionId) {
+    QStringList arguments{
+        QStringLiteral("-p"),
+        QStringLiteral("--input-format"), QStringLiteral("stream-json"),
+        QStringLiteral("--output-format"), QStringLiteral("stream-json"),
+        QStringLiteral("--verbose"),
+    };
+    if (settings.readOnly) {
+        // Plan mode, with only tools that read.
+        arguments << QStringLiteral("--permission-mode") << QStringLiteral("plan")
+                  << QStringLiteral("--allowedTools") << QStringLiteral("Read,Glob,Grep,TodoWrite,WebFetch,WebSearch");
+    } else {
+        // The panel has no approval UI: edits and shell commands run without prompts, like an
+        // accepted session. The system prompt asks to confirm anything destructive in the chat.
+        arguments << QStringLiteral("--permission-mode") << QStringLiteral("acceptEdits")
+                  << QStringLiteral("--allowedTools") << QStringLiteral("Bash,Read,Edit,Write,Glob,Grep,TodoWrite,WebFetch,WebSearch");
+    }
+    if (!settings.model.isEmpty()) {
+        arguments << QStringLiteral("--model") << settings.model;
+    }
+    if (!settings.effort.isEmpty()) {
+        arguments << QStringLiteral("--effort") << settings.effort;
+    }
+    if (!systemPrompt.isEmpty()) {
+        arguments << QStringLiteral("--append-system-prompt") << systemPrompt;
+    }
+    if (!sessionId.isEmpty()) {
+        arguments << QStringLiteral("--resume") << sessionId;
+    }
+    return arguments;
+}
+
+QProcessEnvironment ClaudeCodeSession::toolEnvironment() {
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    QStringList path = toolDirectories();
+    path << environment.value(QStringLiteral("PATH")).split(QLatin1Char(':'), Qt::SkipEmptyParts);
+    path.removeDuplicates();
+    environment.insert(QStringLiteral("PATH"), path.join(QLatin1Char(':')));
+    return environment;
+}
+
+void ClaudeCodeSession::setSettings(const Settings& settings) {
+    if (settings == settings_) {
+        return;
+    }
+    settings_ = settings;
+    restartNeeded_ = true;
+}
+
 QString ClaudeCodeSession::findClaudeExecutable() {
     const QString found = QStandardPaths::findExecutable(QStringLiteral("claude"), toolDirectories());
     return found.isEmpty() ? QStandardPaths::findExecutable(QStringLiteral("claude")) : found;
@@ -51,34 +100,12 @@ bool ClaudeCodeSession::ensureProcess() {
         return false;
     }
 
-    QStringList arguments{
-        QStringLiteral("-p"),
-        QStringLiteral("--input-format"), QStringLiteral("stream-json"),
-        QStringLiteral("--output-format"), QStringLiteral("stream-json"),
-        QStringLiteral("--verbose"),
-        // The panel has no approval UI: edits and shell commands run without prompts, like an
-        // accepted session. The system prompt asks to confirm anything destructive in the chat.
-        QStringLiteral("--permission-mode"), QStringLiteral("acceptEdits"),
-        QStringLiteral("--allowedTools"), QStringLiteral("Bash,Read,Edit,Write,Glob,Grep,TodoWrite,WebFetch,WebSearch"),
-    };
-    if (!options_.systemPrompt.isEmpty()) {
-        arguments << QStringLiteral("--append-system-prompt") << options_.systemPrompt;
-    }
-    if (!sessionId_.isEmpty()) {
-        arguments << QStringLiteral("--resume") << sessionId_;
-    }
-
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    QStringList path = toolDirectories();
-    path << environment.value(QStringLiteral("PATH")).split(QLatin1Char(':'), Qt::SkipEmptyParts);
-    path.removeDuplicates();
-    environment.insert(QStringLiteral("PATH"), path.join(QLatin1Char(':')));
-
     delete process_;
     process_ = new QProcess(this);
     process_->setProgram(claude);
-    process_->setArguments(arguments);
-    process_->setProcessEnvironment(environment);
+    process_->setArguments(arguments(settings_, options_.systemPrompt, sessionId_));
+    process_->setProcessEnvironment(toolEnvironment());
+    restartNeeded_ = false;
     if (QFileInfo(options_.workingDirectory).isDir()) {
         process_->setWorkingDirectory(options_.workingDirectory);
     }
@@ -102,7 +129,16 @@ bool ClaudeCodeSession::ensureProcess() {
 }
 
 void ClaudeCodeSession::send(const QString& text) {
-    if (text.trimmed().isEmpty() || busy_ || !ensureProcess()) {
+    if (text.trimmed().isEmpty() || busy_) {
+        return;
+    }
+    if (restartNeeded_ && process_ && process_->state() != QProcess::NotRunning) {
+        // New settings: restart Claude Code, which resumes the same conversation.
+        stopping_ = true;
+        process_->kill();
+        process_->waitForFinished(3000);
+    }
+    if (!ensureProcess()) {
         return;
     }
     setBusy(true);

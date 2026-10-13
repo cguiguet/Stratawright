@@ -7,10 +7,12 @@ add_executable(presentation_unit_tests
     claude_stream_test.cpp
     conversation_store_test.cpp
     item_view_accessibility_test.cpp
+    claude_settings_test.cpp
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/updates/upstream_pull_requests.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_stream.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/conversation_store.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/item_view_accessibility.cpp"
+    "${CMAKE_SOURCE_DIR}/src/Presentation/views/chat/claude_code_session.cpp"
 )
 
 target_include_directories(presentation_unit_tests PRIVATE

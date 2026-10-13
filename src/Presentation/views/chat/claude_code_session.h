@@ -4,7 +4,9 @@
 
 #include <QObject>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QString>
+#include <QStringList>
 
 namespace presentation::chat {
 
@@ -20,8 +22,28 @@ public:
         QString systemPrompt;       // appended to Claude Code's own system prompt
     };
 
+    // How the agent runs, chosen in the panel's menu. Empty strings keep Claude Code's defaults.
+    struct Settings {
+        QString model;          // alias ("opus", "sonnet"...) or full model name
+        QString effort;         // low, medium, high, xhigh, max
+        bool readOnly = false;  // plan mode: answers and plans, changes nothing
+
+        bool operator==(const Settings& other) const = default;
+    };
+
     explicit ClaudeCodeSession(Options options, QObject* parent = nullptr);
     ~ClaudeCodeSession() override;
+
+    // Takes effect from the next message: Claude Code is restarted on the same conversation.
+    void setSettings(const Settings& settings);
+    const Settings& settings() const { return settings_; }
+
+    // Command line of the Claude Code process for these settings.
+    static QStringList arguments(const Settings& settings, const QString& systemPrompt, const QString& sessionId);
+    // Where Claude Code is installed (empty if not found), and an environment where it and the
+    // tools it uses are found even when the app was launched from Finder.
+    static QString findClaudeExecutable();
+    static QProcessEnvironment toolEnvironment();
 
     bool isBusy() const { return busy_; }
 
@@ -47,9 +69,10 @@ private:
     void onFinished(int exitCode, QProcess::ExitStatus status);
     void setBusy(bool busy);
     void rememberSession(const QString& sessionId);
-    static QString findClaudeExecutable();
 
     Options options_;
+    Settings settings_;
+    bool restartNeeded_ = false;  // settings changed since the process started
     QProcess* process_ = nullptr;
     QByteArray pendingOutput_;
     QByteArray recentErrors_;

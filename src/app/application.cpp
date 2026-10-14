@@ -1,5 +1,6 @@
 #include "application.h"
 #include "composition_root.h"
+#include "launch_options.h"
 #include <QApplication>
 #include <QTimer>
 #include "Presentation/views/main_window.h"
@@ -133,6 +134,13 @@ int Application::run() {
     });
     m_bootTimer->start(30); // Tick every 30 milliseconds
 
+    if (launchOptions().smokeTest) {
+        QTimer::singleShot(120000, m_qapp.get(), []() {
+            std::cerr << "SMOKE TEST FAILED: the boot did not complete within 2 minutes" << std::endl;
+            QCoreApplication::exit(2);
+        });
+    }
+
     if (m_splashScreen) {
         QObject::connect(m_splashScreen.get(), &presentation::views::SplashScreen::sigRetryBoot, [this]() {
             if (m_bootTimer) {
@@ -241,6 +249,10 @@ bool Application::initializeLayer7() {
 bool Application::initializeLayer8() {
     std::cout << "Application: Initializing Layer 8 (Agentic Interface Layer)..." << std::endl;
     m_commandDispatcher = std::make_shared<agentic::CommandDispatcher>();
+    if (launchOptions().smokeTest) {
+        std::cout << "Application: Smoke test: no IPC server (the running app keeps its socket)" << std::endl;
+        return true;
+    }
     m_ipcServer = std::make_unique<agentic::IPCServer>(m_commandDispatcher);
     m_ipcServer->start();
     std::cout << "Application: IPC Server daemon listening on " << agentic::DEFAULT_SOCKET_PATH << std::endl;
@@ -348,9 +360,12 @@ void Application::onBootCompleted() {
     // Process pending events to ensure MainWindow's show event is registered
     m_qapp->processEvents();
 
-    // Announce pull requests opened upstream since the last launch (async; owned by the window).
-    auto* upstreamNotifier = new presentation::updates::UpstreamPullRequestNotifier(m_mainWindow.get());
-    upstreamNotifier->checkNow();
+    const LaunchOptions& options = launchOptions();
+    if (!options.smokeTest) {
+        // Announce pull requests opened upstream since the last launch (async; owned by the window).
+        auto* upstreamNotifier = new presentation::updates::UpstreamPullRequestNotifier(m_mainWindow.get());
+        upstreamNotifier->checkNow();
+    }
 
     // The default session was bootstrapped in wireLayer6ToLayer7 before
     // PlaylistWindow existed, so it missed the initial onSessionChanged.
@@ -359,10 +374,27 @@ void Application::onBootCompleted() {
     if (auto* sessionManager = compositionRoot.getSessionManager()) {
         auto* lifecycle = compositionRoot.getProjectLifecycleController();
         auto* timeline = compositionRoot.getTimelineController();
-        QTimer::singleShot(0, m_qapp.get(), [sessionManager, lifecycle, timeline]() {
-            // After a Relaunch from the chat panel, put the project back before the refresh.
-            presentation::relaunch::restoreSnapshot(lifecycle, timeline);
+        QTimer::singleShot(0, m_qapp.get(), [sessionManager, lifecycle, timeline, &options]() {
+            if (options.smokeTest) {
+                if (!options.smokeProject.empty() && lifecycle && !lifecycle->loadProject(options.smokeProject.c_str())) {
+                    std::cerr << "SMOKE TEST FAILED: could not open " << options.smokeProject << std::endl;
+                    QCoreApplication::exit(4);
+                    return;
+                }
+            } else {
+                // After a Relaunch from the chat panel, put the project back before the refresh.
+                presentation::relaunch::restoreSnapshot(lifecycle, timeline);
+            }
             sessionManager->triggerSessionRefresh();
+        });
+    }
+
+    if (options.smokeTest) {
+        // Let the window, the project and the timers run a little, then quit (which tests the
+        // shutdown too).
+        QTimer::singleShot(3000, m_qapp.get(), []() {
+            std::cout << "SMOKE TEST OK: started, ran 3 s and quit" << std::endl;
+            QCoreApplication::exit(0);
         });
     }
 
@@ -379,6 +411,10 @@ void Application::onBootFailed(const std::string& errorMessage) {
     std::cerr << "Application: Asynchronous boot failed: " << errorMessage << std::endl;
     if (m_bootTimer) {
         m_bootTimer->stop();
+    }
+    if (launchOptions().smokeTest) {
+        std::cerr << "SMOKE TEST FAILED: boot failed" << std::endl;
+        QCoreApplication::exit(3);
     }
 }
 

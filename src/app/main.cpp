@@ -1,6 +1,7 @@
 #include <iostream>
 #include <project_config.h>
 #include "application.h"
+#include "launch_options.h"
 
 #ifdef __APPLE__
 #include <cstdio>
@@ -38,7 +39,21 @@ void redirectOutputToLogFile() {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    redirectOutputToLogFile();
+    app::setLaunchOptions(app::parseLaunchOptions(argc, argv));
+    if (app::launchOptions().smokeTest) {
+        // Nothing on screen, and the output stays with whoever runs the test. Files the app drops
+        // in its working directory go to a temporary one.
+        setenv("QT_QPA_PLATFORM", "offscreen", 1);
+        app::LaunchOptions options = app::launchOptions();
+        std::error_code error;
+        if (!options.smokeProject.empty()) {
+            options.smokeProject = std::filesystem::absolute(options.smokeProject, error).string();
+            app::setLaunchOptions(options);
+        }
+        std::filesystem::current_path(std::filesystem::temp_directory_path(error), error);
+    } else {
+        redirectOutputToLogFile();
+    }
 
     std::cout << config::PROJECT_DISPLAY_NAME << " - Production Grade" << std::endl;
     std::cout << "===================================" << std::endl;

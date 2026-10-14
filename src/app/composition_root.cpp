@@ -1,4 +1,5 @@
 #include "composition_root.h"
+#include "launch_options.h"
 #include "Hardware/OS abstraction/audio/iaudio_driver.h"
 #include "Hardware/OS abstraction/filesystem/ifile_system.h"
 #include "Hardware/OS abstraction/midi/imidi_driver.h"
@@ -649,6 +650,10 @@ bool CompositionRoot::connectAudioToBridges() {
     audioEngine_->prepare(kPreferredSampleRate, 512);
     if (projectLifecycleController_) {
         projectLifecycleController_->setEngineSampleRate(kPreferredSampleRate);
+    }
+    if (launchOptions().smokeTest) {
+        std::cout << "CompositionRoot: Smoke test: no audio device opened" << std::endl;
+        return true;
     }
 
     // 2. Pick the devices instead of blindly opening index 0 (on a MacBook that is the

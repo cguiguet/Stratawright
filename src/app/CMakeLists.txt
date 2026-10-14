@@ -6,6 +6,7 @@ add_executable(${PROJECT_EXECUTABLE_NAME} MACOSX_BUNDLE WIN32
     main.cpp
     application.cpp
     composition_root.cpp
+    launch_options.cpp
     pipeline_builders/track_pipeline_builder_impl.cpp
     pipeline_builders/preview_pipeline_builder_impl.cpp
     ${CMAKE_SOURCE_DIR}/src/Presentation/resources.qrc

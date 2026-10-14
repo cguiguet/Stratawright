@@ -12,6 +12,8 @@
 #include "../shortcuts/ShortcutManager.h"
 #include "../shortcuts/ShortcutRegistry.h"
 #include <QAction>
+#include <QDir>
+#include <QFileInfo>
 #include <QMenu>
 #include <QMenuBar>
 #include <QDockWidget>
@@ -91,14 +93,7 @@ MainWindow::MainWindow(QWidget* parent)
     m_chatDock->setMinimumWidth(340);
     addDockWidget(Qt::RightDockWidgetArea, m_chatDock);
     // Relaunch keeps the project: save a snapshot, restart, restore it at the next boot.
-    connect(m_chatPanel, &chat::ChatPanel::relaunchRequested, this, [this]() {
-        const QString error = relaunch::saveSnapshot(m_lifecycleController, m_timelineController);
-        if (!error.isEmpty()) {
-            m_chatPanel->showError(error + QStringLiteral(" Save it yourself (Cmd+S), then press Relaunch again."));
-            return;
-        }
-        relaunch::relaunchApplication();
-    });
+    connect(m_chatPanel, &chat::ChatPanel::relaunchRequested, this, &MainWindow::relaunchAfterCheck);
 
     // Global Navigation & View Shortcuts via ShortcutManager
     auto& sm = presentation::shortcuts::ShortcutManager::instance();
@@ -354,6 +349,48 @@ void MainWindow::paintEvent(QPaintEvent* event) {
     // Draw simple subtle horizontal faceplate vectors at the margins
     painter.drawLine(0, 1, width(), 1);
     painter.drawLine(0, height() - 1, width(), height() - 1);
+}
+
+void MainWindow::relaunchAfterCheck() {
+    if (m_relaunchChecking) {
+        return;
+    }
+    const QString error = relaunch::saveSnapshot(m_lifecycleController, m_timelineController);
+    if (!error.isEmpty()) {
+        m_chatPanel->showError(error + QStringLiteral(" Save it yourself (Cmd+S), then press Relaunch again."));
+        return;
+    }
+    m_relaunchChecking = true;
+    m_chatPanel->showStatus(QStringLiteral("Checking that the new build starts…"));
+    const QString snapshot = QFileInfo::exists(relaunch::snapshotFile()) ? relaunch::snapshotFile() : QString();
+    relaunch::runSmokeTest(snapshot, this, [this](const relaunch::SmokeTestResult& result) {
+        m_relaunchChecking = false;
+        if (result.passed) {
+            relaunch::relaunchApplication();
+            return;
+        }
+        relaunch::forgetSnapshot();
+        QString details = result.crashReport.isEmpty() ? QString() : QStringLiteral(" Crash report: %1.").arg(result.crashReport);
+        m_chatPanel->showStatus(QStringLiteral("The new build does not start: still running this one"));
+        m_chatPanel->reportAppProblem(
+            QStringLiteral("Relaunch cancelled: the rebuilt app does not start (its --smoke-test failed). You keep "
+                           "working in this version.%1").arg(details),
+            QStringLiteral("The rebuilt app does not start: `--smoke-test` fails.%1 Its output ends with:\n```\n%2\n```\n"
+                           "Find the cause, fix it, rebuild, check that `--smoke-test` passes, then tell me to press Relaunch.")
+                .arg(details, result.output.trimmed().right(1500)));
+    });
+}
+
+void MainWindow::showRecoveryNotice() {
+    const QString report = relaunch::newestCrashReport();
+    const QString log = QDir::homePath() + QStringLiteral("/Library/Logs/Stratawright/stratawright.previous.log");
+    const QString details = (report.isEmpty() ? QString() : QStringLiteral(" Crash report: %1.").arg(report))
+        + QStringLiteral(" Log of the failed start: %1.").arg(log);
+    m_chatPanel->reportAppProblem(
+        QStringLiteral("The rebuilt app crashed while starting, so this is the last version that worked "
+                       "(%1). Your project was put back.%2").arg(relaunch::lastWorkingBundle(), details),
+        QStringLiteral("The rebuilt app crashes at startup; I'm in the last working copy.%1 Find the cause, fix it, "
+                       "rebuild, check that `--smoke-test` passes, then tell me to press Relaunch.").arg(details));
 }
 
 void MainWindow::buildFileMenu() {

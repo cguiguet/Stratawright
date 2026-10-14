@@ -396,6 +396,12 @@ void Application::onBootCompleted() {
             std::cout << "SMOKE TEST OK: started, ran 3 s and quit" << std::endl;
             QCoreApplication::exit(0);
         });
+    } else {
+        // Up for a while without crashing: this build works (see relaunch::markHealthy).
+        QTimer::singleShot(15000, m_qapp.get(), []() { presentation::relaunch::markHealthy(); });
+        if (options.recovered || presentation::relaunch::runningLastWorkingCopy()) {
+            m_mainWindow->showRecoveryNotice();
+        }
     }
 
     // Restore default exit behavior when MainWindow is closed

@@ -66,6 +66,12 @@ public:
     virtual bool saveProject(const char* absoluteFilePath = "") = 0;
 
     /**
+     * @brief Writes a copy of the project to a file without making it the project's file: the
+     * project keeps its path and its unsaved changes.
+     */
+    virtual bool saveProjectCopy(const char* /*absoluteFilePath*/) { return false; }
+
+    /**
      * @brief Loads a snapshot (e.g. one saved before a relaunch) but keeps projectPath as the
      *        project's path, so the next save goes to the user's file, not to the snapshot.
      * @param hadUnsavedChanges Keeps the project marked as modified until it is saved.

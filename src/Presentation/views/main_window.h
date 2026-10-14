@@ -67,6 +67,10 @@ public:
      */
     void setPlaylistControllers(const PlaylistWindow::Controllers& playlistCtrls);
 
+    // This is the last working build, reopened after the rebuilt one crashed: tells the user and
+    // prepares a message asking Claude to fix it.
+    void showRecoveryNotice();
+
     /**
      * @brief Configures and connects the Hardware Settings Facade.
      */
@@ -92,6 +96,8 @@ private Q_SLOTS:
     void showSettingsDialog();
     // File menu (New, Open, Save, Save As) in the menu bar, with their shortcuts.
     void buildFileMenu();
+    // Relaunch from the chat: checks the rebuilt app with --smoke-test before quitting into it.
+    void relaunchAfterCheck();
 
     /**
      * @brief Handles double clicks on MIDI clips from the Playlist.
@@ -120,6 +126,7 @@ private:
 
     bridge::IHardwareSettingsFacade* m_hardwareSettingsFacade{nullptr};
     QMenu* m_fileMenu{nullptr};  // File menu of the menu bar
+    bool m_relaunchChecking{false};  // a Relaunch is checking the new build
     bridge::ITimelineController* m_timelineController{nullptr};
     bridge::IProjectLifecycleController* m_lifecycleController{nullptr};
     bridge::IWorkspaceController* m_workspaceController{nullptr};

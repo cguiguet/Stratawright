@@ -11,6 +11,8 @@ add_executable(presentation_unit_tests
     mic_recorder_test.cpp
     shortcut_registry_test.cpp
     playlist_menu_test.cpp
+    relaunch_watchdog_test.cpp
+    "${CMAKE_SOURCE_DIR}/src/Presentation/views/relaunch.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/playlist/PlaylistMenuButton.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/theme.cpp"
     "${CMAKE_SOURCE_DIR}/src/Presentation/views/updates/upstream_pull_requests.cpp"

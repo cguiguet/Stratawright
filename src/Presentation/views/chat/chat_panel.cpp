@@ -488,6 +488,17 @@ void ChatPanel::insertReference(const QString& reference) {
     input_->setFocus();
 }
 
+void ChatPanel::showStatus(const QString& status) {
+    statusLabel_->setText(status);
+}
+
+void ChatPanel::reportAppProblem(const QString& note, const QString& message) {
+    appendNote(QStringLiteral("⚠️ ") + note);
+    input_->setPlainText(message);
+    input_->moveCursor(QTextCursor::End);
+    input_->setFocus();
+}
+
 void ChatPanel::focusInput() {
     input_->setFocus();
 }

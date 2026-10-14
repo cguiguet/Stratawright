@@ -39,6 +39,10 @@ public:
 
     void focusInput();
     void showError(const QString& message);
+    void showStatus(const QString& status);
+    // Something went wrong with the app itself: says so in the transcript and puts a message for
+    // Claude in the input, ready to send.
+    void reportAppProblem(const QString& note, const QString& message);
     // Follows the open project to show its conversation.
     void setProjectContext(bridge::IProjectLifecycleController* lifecycle, bridge::ISessionManager* sessions);
     // Adds a reference to something in the project (e.g. the selection) to the message being typed.

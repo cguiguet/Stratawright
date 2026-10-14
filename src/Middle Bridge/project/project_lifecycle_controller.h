@@ -65,6 +65,7 @@ public:
     bool saveProject(const char* absoluteFilePath = "") override;
     bool restoreProject(const char* snapshotFilePath, const char* projectPath, bool hadUnsavedChanges) override;
     void setEngineSampleRate(uint32_t sampleRate) override;
+    bool saveProjectCopy(const char* absoluteFilePath) override;
     bool exportProjectToJson(const char* absoluteFilePath) override;
     bool importProjectFromJson(const char* absoluteFilePath) override;
     void closeProject() override;

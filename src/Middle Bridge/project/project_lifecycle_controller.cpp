@@ -172,6 +172,13 @@ bool ProjectLifecycleController::loadProject(const char* absoluteFilePath) {
     return true;
 }
 
+bool ProjectLifecycleController::saveProjectCopy(const char* absoluteFilePath) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto* session = sessionManager_->getActiveSession();
+    if (!session || !absoluteFilePath || std::strlen(absoluteFilePath) == 0) return false;
+    return session->saveToFile(absoluteFilePath, sessionManager_->getStringRegistry());
+}
+
 bool ProjectLifecycleController::saveProject(const char* absoluteFilePath) {
     std::lock_guard<std::mutex> lock(mutex_);
     
